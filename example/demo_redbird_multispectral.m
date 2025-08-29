@@ -35,11 +35,27 @@ cfg0.srcpos = [xi(:), yi(:), zeros(numel(yi), 1)];
 cfg0.detpos = [xi(:), yi(:), 60 * ones(numel(yi), 1)];
 cfg0.detdir = [0 0 -1];
 
+% cfg.param defines the wavelength-independent optical/physiological properties
+% cfg.param accepts: hbo (in uM), hbr (in uM), water (in 0-1 volume fraction), lipids (in 0-1 volume fraction) - these are used to compute mua at any wavelength
+% cfg.param also accepts: scatamp, scatpow - these are used to compute mus' at any wavelength via mus'=scatamp*lambda(in m)^scatpow
+
 cfg0.param = struct;
 cfg0.param.hbo = [15 30];
 cfg0.param.hbr = [4  8];
 
-cfg0.prop = containers.Map();  % if both prop and param are defined, param will ovewrite prop
+% cfg.prop is the wavelength-specific optical properties, it is a volatile variable to be updated when running each wavelength
+% if both prop and param are defined, param will be used to update/ovewrite prop; the function to map param to prop is rbupdateprop()
+% one should still define an initial version of prop so that it can be updated
+
+cfg0.prop = containers.Map();
+
+% the below two lines serve the following purposes
+% 1. the keys in cfg.prop provides the wavelength list, as strings of numbers (can have digits)
+% 2. it has N+1 rows, for tissue type 0, and type 1-N, just like MCX/MMC; the first row is for type 0
+% 3. it defines refractive index (n) for each tissue type
+% 4. anisotropy g must be 0 in redbird because it solves the DE
+% here, because param.hbo and param.hbr are defined, the mua of the below cfg.prop will be updated (the initial values do not matter here)
+% if param.scatamp and param.scatpow are also defined, the mus will also be updated (therefore, the initial values will be overwritten)
 cfg0.prop('690') = [0 0 1 1; 0   1 0 1.37; 0 1 0 1.37];
 cfg0.prop('830') = [0 0 1 1; 0 0.8 0 1.37; 0 0.8 0 1.37];
 

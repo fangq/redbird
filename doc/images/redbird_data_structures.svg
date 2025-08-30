@@ -1,0 +1,1610 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 1600 1100"
+   version="1.1"
+   id="svg382"
+   sodipodi:docname="redbird_data_structures.svg"
+   inkscape:version="1.1.2 (0a00cf5339, 2022-02-04)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview384"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     showgrid="false"
+     inkscape:zoom="1.5222081"
+     inkscape:cx="1229.464"
+     inkscape:cy="615.55318"
+     inkscape:window-width="2560"
+     inkscape:window-height="1352"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="g312" />
+  <defs
+     id="defs8">
+    <marker
+       id="arrowhead"
+       markerWidth="10"
+       markerHeight="7"
+       refX="9"
+       refY="3.5"
+       orient="auto">
+      <polygon
+         points="0 0, 10 3.5, 0 7"
+         fill="#333"
+         id="polygon2" />
+    </marker>
+    <pattern
+       id="diagonal"
+       patternUnits="userSpaceOnUse"
+       width="4"
+       height="4">
+      <path
+         d="M-1,1 L1,-1 M0,4 L4,0 M3,5 L5,3"
+         stroke="#ccc"
+         stroke-width="0.5"
+         id="path5" />
+    </pattern>
+  </defs>
+  <!-- Background -->
+  <rect
+     width="1600"
+     height="1100"
+     fill="#f8f9fa"
+     id="rect10" />
+  <!-- Title -->
+  <text
+     x="800"
+     y="35"
+     text-anchor="middle"
+     font-family="Arial, sans-serif"
+     font-size="30"
+     font-weight="bold"
+     fill="#2c3e50"
+     id="text12">Redbird Data Structures: cfg (Forward) and recon (Inverse)</text>
+  <!-- Forward cfg Structure -->
+  <g
+     id="g186">
+    <rect
+       x="50"
+       y="70"
+       width="700"
+       height="950"
+       rx="15"
+       fill="#e3f2fd"
+       stroke="#3498db"
+       stroke-width="3"
+       id="rect14" />
+    <text
+       x="400"
+       y="100"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="22"
+       font-weight="bold"
+       fill="#3498db"
+       id="text16">cfg (Forward Data Structure)</text>
+    <text
+       x="400"
+       y="125"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="14"
+       fill="#3498db"
+       id="text18">Used by rbrunforward(cfg)</text>
+    <!-- Core Mesh Data -->
+    <rect
+       x="70"
+       y="150"
+       width="660"
+       height="140"
+       rx="8"
+       fill="#bbdefb"
+       stroke="#3498db"
+       stroke-width="2"
+       id="rect20" />
+    <text
+       x="400"
+       y="175"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="16"
+       font-weight="bold"
+       fill="#1976d2"
+       id="text22">Core Mesh Data (Required*)</text>
+    <rect
+       x="90"
+       y="190"
+       width="140"
+       height="30"
+       rx="5"
+       fill="#3498db"
+       id="rect24" />
+    <text
+       x="160"
+       y="210"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="white"
+       font-weight="bold"
+       id="text26">cfg.node*</text>
+    <text
+       x="160"
+       y="231"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10px"
+       fill="#1976d2"
+       id="text28">Node coordinates</text>
+    <rect
+       x="250"
+       y="190"
+       width="140"
+       height="30"
+       rx="5"
+       fill="#3498db"
+       id="rect30" />
+    <text
+       x="320"
+       y="210"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="white"
+       font-weight="bold"
+       id="text32">cfg.elem*</text>
+    <text
+       x="320"
+       y="231"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10px"
+       fill="#1976d2"
+       id="text34">Element connectivity</text>
+    <rect
+       x="410"
+       y="190"
+       width="140"
+       height="30"
+       rx="5"
+       fill="#3498db"
+       id="rect36" />
+    <text
+       x="480"
+       y="210"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="white"
+       font-weight="bold"
+       id="text38">cfg.seg</text>
+    <text
+       x="480"
+       y="231"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10px"
+       fill="#1976d2"
+       id="text40">Segmentation labels</text>
+    <rect
+       x="570"
+       y="190"
+       width="140"
+       height="30"
+       rx="5"
+       fill="#3498db"
+       id="rect42" />
+    <text
+       x="640"
+       y="210"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="white"
+       font-weight="bold"
+       id="text44">cfg.prop*</text>
+    <text
+       x="640"
+       y="231"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10px"
+       fill="#1976d2"
+       id="text46">wavelength-dependent</text>
+    <rect
+       x="170"
+       y="241"
+       width="260"
+       height="30"
+       rx="5"
+       fill="#2980b9"
+       id="rect48" />
+    <text
+       x="300"
+       y="261"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12px"
+       fill="#ffffff"
+       font-weight="bold"
+       id="text50">cfg.param</text>
+    <text
+       x="301.59204"
+       y="282.35474"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10px"
+       fill="#1976d2"
+       id="text52">wavelength-independent physiol.</text>
+    <!-- Source Configuration -->
+    <rect
+       x="70"
+       y="310"
+       width="320"
+       height="140"
+       rx="8"
+       fill="#c8e6c9"
+       stroke="#27ae60"
+       stroke-width="2"
+       id="rect54" />
+    <text
+       x="230"
+       y="335"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="16"
+       font-weight="bold"
+       fill="#2e7d32"
+       id="text56">Source Configuration</text>
+    <rect
+       x="90"
+       y="350"
+       width="130"
+       height="25"
+       rx="4"
+       fill="#27ae60"
+       id="rect58" />
+    <text
+       x="155"
+       y="367"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11"
+       fill="white"
+       font-weight="bold"
+       id="text60">cfg.srctype*</text>
+    <rect
+       x="240"
+       y="350"
+       width="130"
+       height="25"
+       rx="4"
+       fill="#27ae60"
+       id="rect62" />
+    <text
+       x="305"
+       y="367"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11"
+       fill="white"
+       font-weight="bold"
+       id="text64">cfg.srcpos*</text>
+    <rect
+       x="90"
+       y="385"
+       width="130"
+       height="25"
+       rx="4"
+       fill="#27ae60"
+       id="rect66" />
+    <text
+       x="155"
+       y="402"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11"
+       fill="white"
+       font-weight="bold"
+       id="text68">cfg.srcdir*</text>
+    <rect
+       x="240"
+       y="385"
+       width="130"
+       height="25"
+       rx="4"
+       fill="#27ae60"
+       id="rect70" />
+    <text
+       x="305"
+       y="402"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11px"
+       fill="#ffffff"
+       font-weight="bold"
+       id="text72">cfg.srcpattern*</text>
+    <text
+       x="298.32715"
+       y="423.08063"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10px"
+       fill="#2e7d32"
+       id="text74">Pattern source data</text>
+    <text
+       x="298.32715"
+       y="435.08063"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="9px"
+       fill="#2e7d32"
+       id="text76">(3D: Nx x Ny x Npat)</text>
+    <!-- Detector Configuration -->
+    <rect
+       x="410"
+       y="310"
+       width="320"
+       height="140"
+       rx="8"
+       fill="#ffe0b2"
+       stroke="#e67e22"
+       stroke-width="2"
+       id="rect78" />
+    <text
+       x="570"
+       y="335"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="16"
+       font-weight="bold"
+       fill="#ef6c00"
+       id="text80">Detector Configuration</text>
+    <rect
+       x="430"
+       y="350"
+       width="130"
+       height="25"
+       rx="4"
+       fill="#e67e22"
+       id="rect82" />
+    <text
+       x="495"
+       y="367"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11"
+       fill="white"
+       font-weight="bold"
+       id="text84">cfg.dettype</text>
+    <rect
+       x="580"
+       y="350"
+       width="130"
+       height="25"
+       rx="4"
+       fill="#e67e22"
+       id="rect86" />
+    <text
+       x="645"
+       y="367"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11"
+       fill="white"
+       font-weight="bold"
+       id="text88">cfg.detpos*</text>
+    <rect
+       x="505"
+       y="385"
+       width="130"
+       height="25"
+       rx="4"
+       fill="#e67e22"
+       id="rect90" />
+    <text
+       x="570"
+       y="402"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11"
+       fill="white"
+       font-weight="bold"
+       id="text92">cfg.detdir*</text>
+    <!-- System Properties -->
+    <rect
+       x="70"
+       y="470"
+       width="320"
+       height="100"
+       rx="8"
+       fill="#e1bee7"
+       stroke="#9b59b6"
+       stroke-width="2"
+       id="rect94" />
+    <text
+       x="230"
+       y="495"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="16"
+       font-weight="bold"
+       fill="#7b1fa2"
+       id="text96">System Properties</text>
+    <rect
+       x="90"
+       y="510"
+       width="130"
+       height="25"
+       rx="4"
+       fill="#9b59b6"
+       id="rect98" />
+    <text
+       x="155"
+       y="527"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11"
+       fill="white"
+       font-weight="bold"
+       id="text100">cfg.bulk</text>
+    <rect
+       x="240"
+       y="510"
+       width="130"
+       height="25"
+       rx="4"
+       fill="#9b59b6"
+       id="rect102" />
+    <text
+       x="305"
+       y="527"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11"
+       fill="white"
+       font-weight="bold"
+       id="text104">cfg.omega</text>
+    <text
+       x="303.77469"
+       y="553.2608"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10px"
+       fill="#7b1fa2"
+       id="text106">Frequency-domain modulation</text>
+    <!-- Auto-Generated Fields -->
+    <rect
+       x="70"
+       y="590"
+       width="660"
+       height="410"
+       rx="8"
+       fill="#f5f5f5"
+       stroke="#95a5a6"
+       stroke-width="2"
+       stroke-dasharray="5,5"
+       id="rect108" />
+    <text
+       x="400"
+       y="615"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="16"
+       font-weight="bold"
+       fill="#616161"
+       id="text110">Auto-Generated Fields</text>
+    <text
+       x="400"
+       y="635"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="#616161"
+       id="text112">Populated by rbmeshprep() or manually added</text>
+    <!-- Mesh Derived Data -->
+    <rect
+       x="90"
+       y="650"
+       width="280"
+       height="140"
+       rx="6"
+       fill="#cfd8dc"
+       stroke="#607d8b"
+       stroke-width="1"
+       id="rect114" />
+    <text
+       x="230"
+       y="675"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="14"
+       font-weight="bold"
+       fill="#37474f"
+       id="text116">Mesh Derived</text>
+    <rect
+       x="100"
+       y="690"
+       width="80"
+       height="22"
+       rx="3"
+       fill="#607d8b"
+       id="rect118" />
+    <text
+       x="140"
+       y="704"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="white"
+       id="text120">cfg.face</text>
+    <rect
+       x="190"
+       y="690"
+       width="80"
+       height="22"
+       rx="3"
+       fill="#607d8b"
+       id="rect122" />
+    <text
+       x="230"
+       y="704"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="white"
+       id="text124">cfg.area</text>
+    <rect
+       x="280"
+       y="690"
+       width="80"
+       height="22"
+       rx="3"
+       fill="#607d8b"
+       id="rect126" />
+    <text
+       x="320"
+       y="704"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="white"
+       id="text128">cfg.evol</text>
+    <rect
+       x="100"
+       y="720"
+       width="80"
+       height="22"
+       rx="3"
+       fill="#607d8b"
+       id="rect130" />
+    <text
+       x="140"
+       y="734"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="white"
+       id="text132">cfg.nvol</text>
+    <rect
+       x="190"
+       y="720"
+       width="80"
+       height="22"
+       rx="3"
+       fill="#607d8b"
+       id="rect134" />
+    <text
+       x="230"
+       y="734"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="white"
+       id="text136">cfg.reff</text>
+    <rect
+       x="145"
+       y="750"
+       width="110"
+       height="22"
+       rx="3"
+       fill="#455a64"
+       id="rect138" />
+    <text
+       x="200"
+       y="764"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="white"
+       id="text140">cfg.deldotdel</text>
+    <!-- Sparse Matrix Data -->
+    <rect
+       x="390"
+       y="650"
+       width="320"
+       height="140"
+       rx="6"
+       fill="#cfd8dc"
+       stroke="#607d8b"
+       stroke-width="1"
+       id="rect142" />
+    <text
+       x="550"
+       y="675"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="14"
+       font-weight="bold"
+       fill="#37474f"
+       id="text144">Sparse Matrix (CSC Format)</text>
+    <rect
+       x="410"
+       y="690"
+       width="90"
+       height="22"
+       rx="3"
+       fill="#607d8b"
+       id="rect146" />
+    <text
+       x="455"
+       y="704"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="white"
+       id="text148">cfg.rows</text>
+    <rect
+       x="510"
+       y="690"
+       width="90"
+       height="22"
+       rx="3"
+       fill="#607d8b"
+       id="rect150" />
+    <text
+       x="555"
+       y="704"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="white"
+       id="text152">cfg.cols</text>
+    <rect
+       x="610"
+       y="690"
+       width="90"
+       height="22"
+       rx="3"
+       fill="#607d8b"
+       id="rect154" />
+    <text
+       x="655"
+       y="704"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="white"
+       id="text156">cfg.idxcount</text>
+    <rect
+       x="460"
+       y="720"
+       width="90"
+       height="22"
+       rx="3"
+       fill="#607d8b"
+       id="rect158" />
+    <text
+       x="505"
+       y="734"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="white"
+       id="text160">cfg.idxsum</text>
+    <text
+       x="550"
+       y="760"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="9"
+       fill="#616161"
+       id="text162">Compressed Sparse Column</text>
+    <text
+       x="550"
+       y="772"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="9"
+       fill="#616161"
+       id="text164">format for system matrix A</text>
+    <!-- MMC/MCX Compatibility Note -->
+    <rect
+       x="90"
+       y="810"
+       width="620"
+       height="60"
+       rx="5"
+       fill="#fff3e0"
+       stroke="#f39c12"
+       stroke-width="1"
+       id="rect166" />
+    <text
+       x="400"
+       y="830"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       font-weight="bold"
+       fill="#e65100"
+       id="text168">MMC/MCX Compatibility</text>
+    <text
+       x="400"
+       y="845"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#e65100"
+       id="text170">Fields marked with * share nearly identical definitions with MMC/MCX</text>
+    <text
+       x="400"
+       y="857"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#e65100"
+       id="text172">ensuring compatibility with existing Monte Carlo forward solvers</text>
+    <!-- Function References -->
+    <rect
+       x="90"
+       y="880"
+       width="620"
+       height="110"
+       rx="5"
+       fill="#eceff1"
+       stroke="#607d8b"
+       stroke-width="1"
+       id="rect174" />
+    <text
+       x="400"
+       y="900"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       font-weight="bold"
+       fill="#37474f"
+       id="text176">Related Functions</text>
+    <text
+       x="400"
+       y="920"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#37474f"
+       id="text178">rbmeshprep() - populate auto-generated fields</text>
+    <text
+       x="400"
+       y="935"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#37474f"
+       id="text180">rbgetreff() - compute effective reflection coefficient</text>
+    <text
+       x="400"
+       y="950"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#37474f"
+       id="text182">rbdeldotdel() - compute quadratic FEM term</text>
+    <text
+       x="400"
+       y="965"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#37474f"
+       id="text184">rbfemnz() - generate sparse matrix structure</text>
+  </g>
+  <!-- Inverse recon Structure -->
+  <g
+     id="g312">
+    <rect
+       x="800"
+       y="70"
+       width="750"
+       height="950"
+       rx="15"
+       fill="#ffebee"
+       stroke="#e74c3c"
+       stroke-width="3"
+       id="rect188" />
+    <text
+       x="1175"
+       y="100"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="26"
+       font-weight="bold"
+       fill="#e74c3c"
+       id="text190">recon (Inverse Data Structure)</text>
+    <text
+       x="1175"
+       y="125"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="16"
+       fill="#e74c3c"
+       id="text192">Used by rbrunrecon(maxiter, cfg, recon)</text>
+    <!-- Dual-Mesh Concept -->
+    <rect
+       x="820"
+       y="150"
+       width="710"
+       height="90"
+       rx="8"
+       fill="#ffcdd2"
+       stroke="#e74c3c"
+       stroke-width="2"
+       id="rect194" />
+    <text
+       x="1175"
+       y="175"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="20"
+       font-weight="bold"
+       fill="#c62828"
+       id="text196">Dual-Mesh Support</text>
+    <text
+       x="1175"
+       y="195"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="14"
+       fill="#c62828"
+       id="text198">Fine mesh for forward modeling (high accuracy)</text>
+    <text
+       x="1175"
+       y="210"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="14"
+       fill="#c62828"
+       id="text200">Coarse reconstruction mesh for inverse problem (computational efficiency)</text>
+    <text
+       x="1175"
+       y="225"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="#c62828"
+       id="text202">If recon mesh not specified, uses same mesh as cfg</text>
+    <!-- Reconstruction Mesh -->
+    <rect
+       x="820"
+       y="260"
+       width="350"
+       height="120"
+       rx="8"
+       fill="#ffcdd2"
+       stroke="#e74c3c"
+       stroke-width="2"
+       id="rect204" />
+    <text
+       x="995"
+       y="285"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="16"
+       font-weight="bold"
+       fill="#c62828"
+       id="text206">Reconstruction Mesh</text>
+    <rect
+       x="840"
+       y="300"
+       width="140"
+       height="30"
+       rx="5"
+       fill="#e74c3c"
+       id="rect208" />
+    <text
+       x="910"
+       y="320"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="white"
+       font-weight="bold"
+       id="text210">recon.node</text>
+    <rect
+       x="1010"
+       y="300"
+       width="140"
+       height="30"
+       rx="5"
+       fill="#e74c3c"
+       id="rect212" />
+    <text
+       x="1080"
+       y="320"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="white"
+       font-weight="bold"
+       id="text214">recon.elem</text>
+    <text
+       x="995"
+       y="355"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#c62828"
+       id="text216">Optional independent reconstruction mesh</text>
+    <text
+       x="995"
+       y="367"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#c62828"
+       id="text218">(often coarser than forward mesh)</text>
+    <!-- Initial Values and Bulk Properties -->
+    <rect
+       x="1190"
+       y="260"
+       width="340"
+       height="180"
+       rx="8"
+       fill="#f8bbd9"
+       stroke="#c2185b"
+       stroke-width="2"
+       id="rect220" />
+    <text
+       x="1360"
+       y="285"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="16"
+       font-weight="bold"
+       fill="#ad1457"
+       id="text222">Initial Values and Bulk Properties</text>
+    <rect
+       x="1210"
+       y="300"
+       width="300"
+       height="35"
+       rx="5"
+       fill="#c2185b"
+       id="rect224" />
+    <text
+       x="1360"
+       y="322"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="white"
+       font-weight="bold"
+       id="text226">recon.bulk</text>
+    <text
+       x="1360"
+       y="345"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#ad1457"
+       id="text228">Homogeneous initial values</text>
+    <rect
+       x="1210"
+       y="385"
+       width="140"
+       height="25"
+       rx="4"
+       fill="#c2185b"
+       id="rect230" />
+    <text
+       x="1280"
+       y="402"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11"
+       fill="white"
+       font-weight="bold"
+       id="text232">recon.lambda</text>
+    <text
+       x="1280"
+       y="420"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="9"
+       fill="#ad1457"
+       id="text234">Tikhonov parameter</text>
+    <rect
+       x="1370"
+       y="385"
+       width="140"
+       height="25"
+       rx="4"
+       fill="#c2185b"
+       id="rect236" />
+    <text
+       x="1440"
+       y="402"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11"
+       fill="white"
+       font-weight="bold"
+       id="text238">Regularization</text>
+    <!-- Node-wise Properties -->
+    <rect
+       x="820"
+       y="400"
+       width="350"
+       height="150"
+       rx="8"
+       fill="#e1bee7"
+       stroke="#8e44ad"
+       stroke-width="2"
+       id="rect240" />
+    <text
+       x="995"
+       y="425"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="16"
+       font-weight="bold"
+       fill="#6a1b9a"
+       id="text242">Node-wise Properties</text>
+    <text
+       x="995"
+       y="445"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="#6a1b9a"
+       id="text244">(Initial guess and iteratively recovered)</text>
+    <rect
+       x="840"
+       y="460"
+       width="140"
+       height="35"
+       rx="5"
+       fill="#8e44ad"
+       id="rect246" />
+    <text
+       x="910"
+       y="482"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="white"
+       font-weight="bold"
+       id="text248">recon.param</text>
+    <text
+       x="910"
+       y="505"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="9"
+       fill="#6a1b9a"
+       id="text250">Multi-spectral properties</text>
+    <text
+       x="910"
+       y="515"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="9"
+       fill="#6a1b9a"
+       id="text252">defined on recon mesh</text>
+    <rect
+       x="1010"
+       y="460"
+       width="140"
+       height="35"
+       rx="5"
+       fill="#8e44ad"
+       id="rect254" />
+    <text
+       x="1080"
+       y="482"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="white"
+       font-weight="bold"
+       id="text256">recon.prop</text>
+    <text
+       x="1080"
+       y="505"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="9"
+       fill="#6a1b9a"
+       id="text258">wavelength-dependent properties</text>
+    <text
+       x="1080"
+       y="515"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="9"
+       fill="#6a1b9a"
+       id="text260">defined on recon mesh</text>
+    <!-- Mesh Mapping -->
+    <rect
+       x="820"
+       y="570"
+       width="710"
+       height="180"
+       rx="8"
+       fill="#b2dfdb"
+       stroke="#16a085"
+       stroke-width="2"
+       id="rect262" />
+    <text
+       x="1175"
+       y="595"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="16"
+       font-weight="bold"
+       fill="#00695c"
+       id="text264">Dual-Mesh Mapping</text>
+    <text
+       x="1175"
+       y="615"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="#00695c"
+       id="text266">Data structures for mapping between forward and reconstruction meshes</text>
+    <rect
+       x="920"
+       y="635"
+       width="200"
+       height="35"
+       rx="5"
+       fill="#16a085"
+       id="rect268" />
+    <text
+       x="1020"
+       y="657"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="white"
+       font-weight="bold"
+       id="text270">recon.mapid</text>
+    <text
+       x="1020"
+       y="680"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#00695c"
+       id="text272">Element indices of recon mesh</text>
+    <text
+       x="1020"
+       y="692"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#00695c"
+       id="text274">enclosing forward mesh nodes</text>
+    <rect
+       x="1150"
+       y="635"
+       width="200"
+       height="35"
+       rx="5"
+       fill="#16a085"
+       id="rect276" />
+    <text
+       x="1250"
+       y="657"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="white"
+       font-weight="bold"
+       id="text278">recon.mapweight</text>
+    <text
+       x="1250"
+       y="680"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#00695c"
+       id="text280">Barycentric coordinates of</text>
+    <text
+       x="1250"
+       y="692"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#00695c"
+       id="text282">forward nodes in recon elements</text>
+    <rect
+       x="940"
+       y="710"
+       width="470"
+       height="25"
+       rx="4"
+       fill="#00796b"
+       id="rect284" />
+    <text
+       x="1175"
+       y="727"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="11"
+       fill="white"
+       font-weight="bold"
+       id="text286">Enables property transfer between meshes of different resolutions</text>
+    <!-- Iterative Process -->
+    <rect
+       x="820"
+       y="770"
+       width="710"
+       height="120"
+       rx="8"
+       fill="#ffe0b2"
+       stroke="#d35400"
+       stroke-width="2"
+       id="rect288" />
+    <text
+       x="1175"
+       y="795"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="16"
+       font-weight="bold"
+       fill="#bf360c"
+       id="text290">Iterative Reconstruction Process</text>
+    <text
+       x="1175"
+       y="820"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       fill="#bf360c"
+       id="text292">1. Initialize with bulk properties and initial guess</text>
+    <text
+       x="1176.1158"
+       y="880.7713"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12px"
+       fill="#bf360c"
+       id="text294">4. Map properties from recon mesh to forward mesh, and repeat until converge</text>
+    <text
+       x="1175"
+       y="860"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12px"
+       fill="#bf360c"
+       id="text296">3. Solve inverse equation and update recon.param and recon.prop iteratively</text>
+    <text
+       x="1169.9727"
+       y="840.05188"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12px"
+       fill="#bf360c"
+       id="text298">2. Solve forward model and compare predicted and real measurement data</text>
+    <!-- Function References -->
+    <rect
+       x="820"
+       y="910"
+       width="710"
+       height="100"
+       rx="5"
+       fill="#eceff1"
+       stroke="#607d8b"
+       stroke-width="1"
+       id="rect300" />
+    <text
+       x="1175"
+       y="930"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="12"
+       font-weight="bold"
+       fill="#37474f"
+       id="text302">Related Functions</text>
+    <text
+       x="1175"
+       y="950"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#37474f"
+       id="text304">rbsyncprop() - map properties between recon and forward meshes</text>
+    <text
+       x="1175"
+       y="965"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#37474f"
+       id="text306">rbupdateprop() - compute wavelength-dependent from multi-spectral properties</text>
+    <text
+       x="1175"
+       y="980"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10px"
+       fill="#37474f"
+       id="text308">rbreginv*() - solve regularized inverse equation</text>
+    <text
+       x="1175"
+       y="995"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#37474f"
+       id="text310">rbmultispectral() - handle multi-wavelength reconstruction</text>
+  </g>
+  <!-- Connecting Arrows and Relationships -->
+  <!-- Forward to Inverse Connection -->
+  <path
+     d="m 750,400 c 21.52316,-22.17352 33.3342,-8.25536 50,0"
+     fill="none"
+     stroke="#2c3e50"
+     stroke-width="3"
+     marker-end="url(#arrowhead)"
+     id="path314"
+     sodipodi:nodetypes="cc" />
+  <text
+     x="775"
+     y="360"
+     text-anchor="middle"
+     font-family="Arial, sans-serif"
+     font-size="12"
+     font-weight="bold"
+     fill="#2c3e50"
+     id="text316">cfg input to</text>
+  <text
+     x="775"
+     y="375"
+     text-anchor="middle"
+     font-family="Arial, sans-serif"
+     font-size="12"
+     font-weight="bold"
+     fill="#2c3e50"
+     id="text318">rbrunrecon()</text>
+  <!-- Mesh Resolution Illustration -->
+  <g
+     id="g360">
+    <!-- Fine mesh representation -->
+    <circle
+       cx="650"
+       cy="1050"
+       r="3"
+       fill="#3498db"
+       id="circle320" />
+    <circle
+       cx="660"
+       cy="1045"
+       r="3"
+       fill="#3498db"
+       id="circle322" />
+    <circle
+       cx="670"
+       cy="1055"
+       r="3"
+       fill="#3498db"
+       id="circle324" />
+    <circle
+       cx="680"
+       cy="1050"
+       r="3"
+       fill="#3498db"
+       id="circle326" />
+    <circle
+       cx="655"
+       cy="1060"
+       r="3"
+       fill="#3498db"
+       id="circle328" />
+    <circle
+       cx="665"
+       cy="1065"
+       r="3"
+       fill="#3498db"
+       id="circle330" />
+    <circle
+       cx="675"
+       cy="1040"
+       r="3"
+       fill="#3498db"
+       id="circle332" />
+    <line
+       x1="650"
+       y1="1050"
+       x2="660"
+       y2="1045"
+       stroke="#3498db"
+       stroke-width="1"
+       id="line334" />
+    <line
+       x1="660"
+       y1="1045"
+       x2="670"
+       y2="1055"
+       stroke="#3498db"
+       stroke-width="1"
+       id="line336" />
+    <line
+       x1="670"
+       y1="1055"
+       x2="655"
+       y2="1060"
+       stroke="#3498db"
+       stroke-width="1"
+       id="line338" />
+    <text
+       x="662"
+       y="1080"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#3498db"
+       id="text340">Fine Forward Mesh</text>
+    <!-- Coarse mesh representation -->
+    <circle
+       cx="950"
+       cy="1050"
+       r="5"
+       fill="#e74c3c"
+       id="circle342" />
+    <circle
+       cx="980"
+       cy="1040"
+       r="5"
+       fill="#e74c3c"
+       id="circle344" />
+    <circle
+       cx="970"
+       cy="1070"
+       r="5"
+       fill="#e74c3c"
+       id="circle346" />
+    <line
+       x1="950"
+       y1="1050"
+       x2="980"
+       y2="1040"
+       stroke="#e74c3c"
+       stroke-width="2"
+       id="line348" />
+    <line
+       x1="980"
+       y1="1040"
+       x2="970"
+       y2="1070"
+       stroke="#e74c3c"
+       stroke-width="2"
+       id="line350" />
+    <line
+       x1="970"
+       y1="1070"
+       x2="950"
+       y2="1050"
+       stroke="#e74c3c"
+       stroke-width="2"
+       id="line352" />
+    <text
+       x="967"
+       y="1080"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="10"
+       fill="#e74c3c"
+       id="text354">Coarse Recon Mesh</text>
+    <!-- Mapping arrow -->
+    <path
+       d="M 730 1055 Q 800 1035 850 1055"
+       fill="none"
+       stroke="#16a085"
+       stroke-width="2"
+       marker-end="url(#arrowhead)"
+       id="path356" />
+    <text
+       x="790"
+       y="1030"
+       text-anchor="middle"
+       font-family="Arial, sans-serif"
+       font-size="9"
+       fill="#16a085"
+       id="text358">mapid/mapweight</text>
+  </g>
+  <!-- Legend -->
+  <rect
+     x="50"
+     y="1050"
+     width="550"
+     height="40"
+     rx="5"
+     fill="#ecf0f1"
+     stroke="#bdc3c7"
+     stroke-width="1"
+     id="rect362" />
+  <text
+     x="60"
+     y="1070"
+     font-family="Arial, sans-serif"
+     font-size="12"
+     font-weight="bold"
+     fill="#2c3e50"
+     id="text364">Key Features:</text>
+  <rect
+     x="150"
+     y="1062"
+     width="12"
+     height="8"
+     fill="#3498db"
+     id="rect366" />
+  <text
+     x="170"
+     y="1070"
+     font-family="Arial, sans-serif"
+     font-size="10"
+     fill="#2c3e50"
+     id="text368">Required fields (*)</text>
+  <rect
+     x="260"
+     y="1062"
+     width="12"
+     height="8"
+     fill="#f5f5f5"
+     stroke="#95a5a6"
+     stroke-width="1"
+     id="rect370" />
+  <text
+     x="280"
+     y="1070"
+     font-family="Arial, sans-serif"
+     font-size="10"
+     fill="#2c3e50"
+     id="text372">Auto-generated</text>
+  <rect
+     x="370"
+     y="1062"
+     width="12"
+     height="8"
+     fill="#e74c3c"
+     id="rect374" />
+  <text
+     x="390"
+     y="1070"
+     font-family="Arial, sans-serif"
+     font-size="10"
+     fill="#2c3e50"
+     id="text376">Dual-mesh support</text>
+  <rect
+     x="480"
+     y="1062"
+     width="12"
+     height="8"
+     fill="#16a085"
+     id="rect378" />
+  <text
+     x="500"
+     y="1070"
+     font-family="Arial, sans-serif"
+     font-size="10"
+     fill="#2c3e50"
+     id="text380">Mesh mapping</text>
+</svg>

@@ -214,6 +214,4 @@ if (~exist('sd', 'var'))
     sd = rbsdmap(cfg);
 end
 
-maxiter = jsonopt('maxiter', 10, opt);
-
-[varargout{1:nargout}] = rbrunrecon(maxiter, cfg, recon, detphi0, sd, opt);
+[varargout{1:nargout}] = rbrunrecon(cfg, recon, detphi0, sd, 'maxiter', 10, opt);

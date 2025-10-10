@@ -1,15 +1,15 @@
-function [recon, resid, cfg, updates, Jmua, detphi0iter, phi] = rbrunrecon(maxiter, cfg, recon, detphi0, sd, varargin)
+function [recon, resid, cfg, updates, Jmua, detphi0iter, phi] = rbrunrecon(varargin)
 %
-% [newrecon, resid, newcfg]=rbrunrecon(maxiter,cfg,recon,detphi0,sd)
+% [newrecon, resid, newcfg]=rbrunrecon(cfg,recon,detphi0,sd)
 %   or
-% [newrecon, resid, newcfg, updates, Jmua, detphi, phi]=rbrunrecon(maxiter,cfg,recon,detphi0,sd,'param1',value1,'param2',value2,...)
+% [newrecon, resid, newcfg]=rbrunrecon(maxiter,cfg,recon,detphi0,sd)
+% [newrecon, resid, newcfg, updates, Jmua, detphi, phi]=rbrunrecon(cfg,recon,detphi0,sd,'param1',value1,'param2',value2,...)
 %
 % Perform a single iteration of a Gauss-Newton reconstruction
 %
 % author: Qianqian Fang (q.fang <at> neu.edu)
 %
 % input:
-%     maxiter: number of iterations
 %     cfg: simulation settings stored as a redbird data structure
 %     recon: reconstruction data structure, recon may have
 %         node: reconstruction mesh node list
@@ -32,6 +32,7 @@ function [recon, resid, cfg, updates, Jmua, detphi0iter, phi] = rbrunrecon(maxit
 %     sd (optional): source detector mapping table, if not provided, call
 %         rbsdmap(cfg) to compute
 %     param/value: acceptable optional parameters include
+%         'maxiter': number of iterations, default is 5
 %         'lambda': Tikhonov regularization parameter (0.05), overwrite recon.lambda
 %         'report': 1 (default) to print residual and runtimes; 0: silent
 %         'tol': convergence tolerance, if relative residual is less than
@@ -82,7 +83,32 @@ function [recon, resid, cfg, updates, Jmua, detphi0iter, phi] = rbrunrecon(maxit
 % -- this function is part of Redbird-m toolbox
 %
 
-if (maxiter == 0 && nargin < 3)
+inputs = varargin;
+opt = struct;
+
+maxiter = 5;
+
+if (~isstruct(inputs{1}))
+    maxiter = inputs{1};
+    inputs(1) = [];
+end
+
+switch (length(inputs))
+    case 3
+        [cfg, recon, detphi0] = deal(inputs{:});
+    case 4
+        [cfg, recon, detphi0, sd] = deal(inputs{:});
+    case 2
+        error('must provide at least 3 inputs');
+    otherwise
+        if (length(inputs) > 4)
+            [cfg, recon, detphi0, sd] = deal(inputs{1:4});
+            opt = varargin2struct(inputs{5:end});
+            maxiter = jsonopt('maxiter', maxiter, opt);
+        end
+end
+
+if (nargin == 1 || maxiter == 0)
     % return detphi as recon and phi as resid
     [recon, resid] = rbrunforward(cfg);
     return
@@ -91,12 +117,7 @@ end
 resid = zeros(maxiter, 1);
 updates = repmat(struct, 1, maxiter);
 
-opt = varargin2struct(varargin{:});
-
-lambda = 0.05;
-if (isfield(recon, 'lambda'))
-    lambda = recon.lambda;
-end
+lambda = jsonopt('lambda', 0.05, recon);
 lambda = jsonopt('lambda', lambda, opt);
 
 doreport = jsonopt('report', 1, opt);

@@ -4,7 +4,7 @@
 
 * **Copyright**: (C) Qianqian Fang (2005–2025) \<q.fang at neu.edu>, Edward Xu (2024) \<xu.ed at northeastern.edu>
 * **License**: GNU Public License V3 or later
-* **Version**: 0.5.0 (Northern Cardinal)
+* **Version**: 0.5.1 (Northern Cardinal - Update 1)
 * **GitHub**: [https://github.com/fangq/redbird](https://github.com/fangq/redbird)
 * **Acknowledgement**: This project is supported by the US National Institute of Health (NIH)
   grant [R01-CA204443](https://reporter.nih.gov/project-details/10982160)
@@ -62,6 +62,7 @@ Redbird accepts tetrahedral mesh data from any mesh generator, but it integrates
 
 ---
 
+
 ## Workflow Overview
 
 Redbird performs two main tasks:
@@ -72,6 +73,8 @@ Redbird performs two main tasks:
 The Redbird forward solver is equivalent to our MC-based solvers like MCX and MMC, but it solves the **diffusion equation (DE)** instead of the more general **radiative transfer equation (RTE)**. As a result, Redbird is typically over 100× faster (without needing GPUs), and its outputs are free of stochastic noise.
 
 **Note**: The diffusion approximation is only valid in high-scattering media, where the reduced scattering coefficient (μs') is much greater than the absorption coefficient (μa). Using Redbird in low-scattering media such as water or cerebrospinal fluid (CSF) may produce biased results.
+
+---
 
 ### Reconstruction Modes
 
@@ -84,20 +87,122 @@ Redbird supports four types of image reconstructions:
 
 ---
 
-## How to Use
+## Redbird function overview
 
-### Input Data Structure
+![function list](./doc/images/redbird_function_diagram.svg)
 
-The main driver function, `rbrunforward()`, takes a configuration structure `cfg` with the following fields:
 
-* `node`, `face`, `elem`: mesh node coordinates, surface triangles, and tetrahedra
-* `seg`: tissue labels per element (or per node if same length as `node`)
-* `prop`: single-wavelength optical properties (label-wise), same format as MCX/MMC
-    * or `param`: multi-spectral properties (e.g., chromophore concentrations), used to compute `prop` if defined
-* `srcpos`, `srcdir`: source positions and direction vectors
-* `detpos`, `detdir`: detector positions and direction vectors
-* `omega`: modulation angular frequency in the unit of rad for frequency-domain DOI/DOT
+Redbird functions are roughly divided into the following types, identified by the following prefixes:
+- <font color=green>`rbrun*`</font> - "driver functions" that automatesa complex process, such as `rbrun()` for both forward/inverse solvers, or `rbrunforward()` and `rbrunrecon()`
+- <font color=green>`rbfem*`</font> - FEM forward functions
+- <font color=green>`rbjac*`</font> - functions related to building Jacobians
+- <font color=green>`rbreginv*`</font> - functions related to building and regularizing the inverse equation
+- <font color=green>`rbget*`</font> extraction and conversion between different data structures
 
+Specifically, the main Redbird functions are divided into the following groups
+
+* Streamlined forward/inverse solver interface <font color=orange>`rbrun`</font>
+* Forward solvers
+  - <font color=orange>`rbrunforward(cfg)`</font>  - streamlined forward solver
+  - FEM system equation
+      - `rbfemlhs` - creating the A-matrix (LHS) of the FEM system equation Ax=b
+      - `rbfemrhs` - creating the right-hand-side (RHS) of the FEM system equation
+      - `rbfemsolve` - linear solvers solving Ax=b
+      - `rbfemgetdet` - extract fluence at detectors (point or widefield)
+      - `rbfemmatrix.h/.c` - (optional) mex file for building the FEM forward matrix (fast), can be built using `mex rbfemmatrix.cpp` in MATLAB/Octave
+      - `rbdeldotdel` - computing the quadratic term in the FEM equation
+      - `rbsrc2bc` - converting wide-field source into the RHS vector
+  - Pre and post-processing
+      - `rbmeshprep` - mesh data preprocessing before forward modeling
+      - `rbaddnoise` - add shot-noise or thermal noise to the simulated data
+* Inverse solvers
+  - <font color=orange>`rbrunrecon(cfg, recon, detphi0)`</font>  - streamlined inverse solver
+  - Building Jacobians
+    - `rbjac` - building Jacobians for mua/D
+    - `rbjacmex` - building Jacobians for mua/D by calling `rbfemmatrix` mex file
+    - `rbjacmuafast` - nodal-adjoint method for building mua Jacobian
+    - `rbjacmus` - converting Jacobian for D to Jacobian for mus'
+    - `rbjacchrome` - multi-spectral Jacobian for HbO/HbR/water/lipids/aa3 ...
+    - `rbjacscat` - multi-spectral Jacobian for scattering amp/scattering power
+    - `rbjacscatamp` - multi-spectral Jacobian for scattering amp
+    - `rbjacscatpow` - multi-spectral Jacobian for scattering power
+    - `rbmultispectral` - combining all multi-spectral Jacobians into a single equation
+    - `rbjacnode` - convert from element-based Jacobian to node-based Jacobian
+  - Solving and regularizing inverse equation
+    - `rbreginv` - solving the Gauss-Newton Normal Equation with regularization
+    - `rbreginvover` - solving the normal equation for over-determined system
+    - `rbreginvunder` - solving the normal equation for under-determined system
+    - `rbprior` - build the L^TL regularization matrix
+    - `rbregemperical` - compute the emperical regularization factor
+    - `rbcreateinv` - transform the inverse equation between 3 types
+    - `rbmatreform` - transform the inverse matrix between 3 types
+    - `rbmatflat` - combining multi-wavelength Jacobians into a flat matrix
+    - `rbnormalizediag` - normalizing the inverse equation
+* Optical property management
+  - `rbextinction` - molar extinction coefficients for HbO, HbR, water, lipids, AA3 across visible/NIR wavelengths
+  - `rbgetreff` - return the effective reflection coeff of the medium
+  - `rbupdateprop` - using multi-spectral properties (`cfg.param`) to compute wavelength-dependent optical properties (`cfg.prop`)
+  - `rbsyncprop` - mapping optical properties between recon mesh and forward mesh
+  - `rbgetbulk` - get the bulk optical properties using forward structure `cfg`
+  - `rbmusp2sasp` - use mus' at 2 wavelengths to compute scat_amp and scat_power
+* Optode management
+  - `rbsdmap` - create source/detector (SD) measurement list based on `cfg`
+  - `rbgetdistance` - compute the source/detector distances
+  - `rbgetltr` - get transport mean-free path for sinking the sources
+
+---
+
+## Data structures
+
+![cfg structure](./doc/images/redbird_data_structures.svg)
+
+### Forward data structure `cfg`
+
+The forward solver in Redbird follows a very similar structure as those used by mcx and mmc (which are both forward solvers).
+
+The `rbrunforward()` function takes in most of the simulation settings via the `cfg` struct input. This struct contains the following fields
+
+- `cfg.node`*: node list of the mesh
+- `cfg.elem`*: element list of the mesh
+- `cfg.seg`: labels/segmentation in the mesh (similar to mmc's `cfg.elemprop`)
+- `cfg.prop`*: wavelength-dependent optical properties
+- `cfg.param`: wavelength-independent physiological properties (`cfg.param.{hbo,hbr,water,lipids,aa3,scatamp,scatpow}`)
+- `cfg.srctype`*: source type `[pencil]`
+- `cfg.srcpos`*: source array locations
+- `cfg.srcdir`*: source directions
+- `cfg.srcpattern`*: arrays of pattern source data (3D array: Nx*Ny*Npat)
+- `cfg.dettype`: detector type `[pencil]`
+- `cfg.detpos`*: detector array locations
+- `cfg.detdir`*: detector directions
+- `cfg.detpattern`*: arrays of pattern source data (3D array: Nx*Ny*Npat)
+- `cfg.bulk`: bulk optical property
+- `cfg.omega`: frequency-domain system modulation (angular) frequency in rad
+
+properties marked with "*" share nearly identical definitions as in MMC (if exist, also in MCX).
+
+The following extra inputs are derived from the above inputs - they can be automatically populated by running `rbmeshprep`, or manually added
+- `cfg.face`: mesh exterior surface triangles
+- `cfg.area`: areas of surface triangles
+- `cfg.evol`: element volume
+- `cfg.nvol`: nodal volume
+- `cfg.reff`: effective reflective coeff (computed by `rbgetreff`)
+- `cfg.deldotdel`: $\nabla\phi(r)\cdot\nabla\phi(r)$ - the quadratic term of the FEM equation, (computed by `rbdeldotdel`)
+- `cfg.{rows,cols,idxcount}`: Redbird's FEM equation uses a Compressed Sparse Column (CSC) format to store the system matrix A, these are related to the sparse matrix columns returned by `rbfemnz`
+- `cfg.idxsum`: the cumsum() of `cfg.idxcount`, i.e. the starting index of the non-zero terms for each node in the serialized vector
+
+### Inverse data structure `recon`
+
+The inverse solver, `rbrunrecon(cfg, recon, detphi0)` needs both the forward data structure `cfg`, and a new inverse data structure `recon` to store and manage the recovered optical properties. Redbird supports a technique called "dual-mesh", allowing one to use a fine mesh to perform forward solver for high accuracy, and another independent, often times much coarser, recon mesh to store the optical properties to reduce the inverse linear system size and accelerate reconstruction.
+
+The inverse data structure `recon` contains the following fields
+- `recon.node`: the node of the recon mesh (if ignored, recon uses the same mesh as in cfg.node/cfg.elem)
+- `recon.elem`: the element of the recon mesh
+- `recon.bulk`: homogeneous initial values for various optical properties (`recon.bulk.{mua,musp,dcoeff,n,g,hbo,hbr,scatamp,scatpower}`)
+- `recon.param`: (node-wise) initial guess and the iteratively recovered multi-spectral optical properties defined on the recon mesh
+- `recon.prop`: (node-wise) initial guess and the iteratively recovered wavelength-dependent optical properties defined on the recon mesh
+- `recon.lambda`: Tikhonov regularization parameter
+- `recon.mapid`: data structure mapping between recon and forward meshes: the list of element indices of the recon mesh where each forward mesh node is enclosed
+- `recon.mapweight`: data structure mapping between recon and forward meshes: the barycentric coordinates of the forward mesh nodes inside the reconstruction mesh elements
 Besides the forward `cfg`, the inverse solver `rbrunrecon()` requires a `recon` struct:
 
 * `node`, `elem`: optional reconstruction mesh (typically coarser); enables **dual-mesh**
@@ -105,6 +210,10 @@ Besides the forward `cfg`, the inverse solver `rbrunrecon()` requires a `recon` 
 * `bulk`: initial guesses (single-wavelength: `mua`, `musp`, etc. or multi-spectral: `hbo`, `hbr`, etc.)
     * or `prop`: initial distribution of single-wavelength optical properties, with length matching that of `cfg.node` or `cfg.elem`
     * or `param`: initial distribution of multi-spectral optical properties, with length matching that of `cfg.node` or `cfg.elem`
+
+---
+
+## How to Use
 
 ### Streamlined forward and inverse solvers
 
@@ -124,8 +233,9 @@ If 3 inputs are given, such as
 ```
 newrecon = rbrun(cfg, recon, detphi0);
 ```
-`rbrun` performs a reconstruction by fitting the measurement data stored `detphi0` using the
-reconstruction data structures `cfg` and `recon`. This is the same as `newrecon = rbrunrecon(10, cfg, recon, detphi0)`
+`rbrun` performs a reconstruction by fitting the measurement data stored in `detphi0` using the
+forward data structure `cfg` and reconstruction data structures `recon`. This is the same
+as `newrecon = rbrunrecon(cfg, recon, detphi0)`
 
 If the 3rd input is a struct that resembles a forward cfg data structure,
 ```
@@ -135,7 +245,7 @@ this performs a streamlined forward-simulation using `cfg0`, immediately followe
 a reconstruction using `cfg` and `recon`. This is equivallent to 
 ```
 detphi0 = rbrunforward(cfg0);
-newrecon = rbrunrecon(10, cfg, recon, detphi0);
+newrecon = rbrunrecon(cfg, recon, detphi0);
 ```
 
 
@@ -150,20 +260,73 @@ newrecon = rbrunrecon(10, cfg, recon, detphi0);
 
 Perform forward simulations at all sources and all wavelengths based on the input structure
 
+author: Qianqian Fang (q.fang <at> neu.edu)
+
 input:
-    cfg: the redbird cfg input defining the forward simulation settings
+    cfg: the redbird forward simulation data structure
+      The forward solver in Redbird follows a very similar structure as
+      those used by mcx and mmc (which are both forward solvers).
+
+      The rbrunforward() function takes in most of the simulation
+      settings via the cfg struct input. This struct contains the
+      following fields
+
+	node*: node list of the mesh
+	elem*: element list of the mesh
+	seg: labels/segmentation in the mesh (similar to mmc's cfg.elemprop)
+	prop*: wavelength-dependent optical properties
+	param: wavelength-independent physiological properties
+	      (cfg.param.{hbo,hbr,water,lipids,aa3,scatamp,scatpow})
+	srctype*: source type [pencil]
+	srcpos*: source array locations
+	srcdir*: source directions
+	srcpattern*: arrays of pattern source data (3D array: Nx*Ny*Npat)
+	dettype: detector type [pencil]
+	detpos*: detector array locations (3 column, without radius)
+	detdir: detector directions
+	detpattern: arrays of pattern detector data (3D array: Nx*Ny*Npat)
+	bulk: bulk optical property
+	omega: frequency-domain system modulation (angular) frequency in rad
+
+      properties marked with "*" share nearly identical definitions as in
+      MMC (if exist, also in MCX).
+
+      The following extra inputs are derived from the above inputs -
+      they can be automatically populated by running rbmeshprep, or
+      manually added
+
+	face: mesh exterior surface triangles
+	area: areas of surface triangles
+	evol: element volume
+	nvol: nodal volume
+	reff: effective reflective coeff (computed by rbgetreff)
+	deldotdel: $\nabla\phi(r)\cdot\nabla\phi(r)$ - the quadratic term
+	  of the FEM equation, (computed by rbdeldotdel)
+	{rows,cols,idxcount}: Redbird's FEM equation uses a Compressed
+	  Sparse Column (CSC) format to store the system matrix A, these
+	  are related to the sparse matrix columns returned by rbfemnz
+	idxsum: the cumsum() of cfg.idxcount, i.e. the starting index of
+	  the non-zero terms for each node in the serialized vector
+
+    one can also pass on the cfg data structure used by mcxlab or mmclab
+    to rbrunforward. If rbrunforward detects cfg.nphoton and
+    cfg.node/cfg.elem in the input, it calls mmclab and run forward
+    simulations on both the source (cfg.srcpos) and detectors
+    (cfg.detpos); if it sees cfg.nphoton and cfg.vol, then, rbrunforward
+    calls mcxlab to run the forward simulation. mcxlab/mmclab can not
+    handle frequency-domain simulations
 
 output:
-    detval: the values at every source-detector combination (i.e. channels)
-    phi: the full volumetric forward solution computed at all wavelengths at every source and detector
+    detval: the values at the detector locations
+    phi: the full volumetric forward solution computed at all wavelengths
     Amat: the left-hand-side matrices (a containers.Map object) at specified wavelengths
     rhs: the right-hand-side vectors for all sources (independent of wavelengths)
     param/value pairs: (optional) additional parameters
-         'solverflag': a cell array to be used as the optional parameters
-              for rbfemsolve (starting from parameter 'method'), for
-              example  rbrunforward(...,'solverflag',{'pcg',1e-10,200})
-              calls rbfemsolve(A,rhs,'pcg',1e-10,200) to solve forward
-              solutions
+	 'solverflag': a cell array to be used as the optional parameters
+	      for rbfemsolve (starting from parameter 'method'), for
+	      example  rbrunforward(...,'solverflag',{'pcg',1e-10,200})
+	      calls rbfemsolve(A,rhs,'pcg',1e-10,200) to solve forward
+	      solutions
 ```
 
 #### `rbrunrecon`
@@ -171,51 +334,80 @@ output:
 `rbrunrecon` is the streamlined inverse solver of redbird.
 
 ```
-[newrecon, resid, newcfg]=rbrunrecon(maxiter,cfg,recon,detphi0,sd)
+[newrecon, resid, newcfg]=rbrunrecon(cfg,recon,detphi0,sd)
   or
-[newrecon, resid, newcfg, updates, Jmua, detphi, phi]=rbrunrecon(maxiter,cfg,recon,detphi0,sd,'param1',value1,'param2',value2,...)
+[newrecon, resid, newcfg]=rbrunrecon(maxiter,cfg,recon,detphi0,sd)
+[newrecon, resid, newcfg, updates, Jmua, detphi, phi]=rbrunrecon(cfg,recon,detphi0,sd,'param1',value1,'param2',value2,...)
 
 Perform a single iteration of a Gauss-Newton reconstruction
 
+author: Qianqian Fang (q.fang <at> neu.edu)
+
 input:
-    maxiter: number of iterations
     cfg: simulation settings stored as a redbird data structure
     recon: reconstruction data structure, recon may have
-        node: reconstruction mesh node list
-        elem: reconstruction mesh elem list
-        bulk: a struct storing the initial guesses of the param
-        param: wavelength-independent parameter on the recon mesh
-        prop: wavelength-dependent optical properties on the recon mesh
-        lambda: Tikhonov regularization parameter
-        mapid: the list of element indices of the reconstruction mesh where each forward mesh
-          node is enclosed
-        mapweight: the barycentric coordinates of the forward mesh nodes inside the
-          reconstruction mesh elements
+	node: reconstruction mesh node list
+	elem: reconstruction mesh elem list
+	bulk: a struct storing the initial guesses of the param
+	     (wavelength-independent optical properties) and prop
+	     (wavelength-dependent optical properties), accepted
+	     subfields include
+
+	     mua/musp/dcoeff/n/g: used to initialize recon/cfg.prop
+	     hbo/hbr/scatamp/scatpow: used to initialize recon/cfg.param
+	param: wavelength-independent parameter on the recon mesh
+	prop: wavelength-dependent optical properties on the recon mesh
+	lambda: Tikhonov regularization parameter
+	mapid: the list of element indices of the reconstruction mesh where each forward mesh
+	  node is enclosed
+	mapweight: the barycentric coordinates of the forward mesh nodes inside the
+	  reconstruction mesh elements
     detphi0: measurement data vector or matrix
     sd (optional): source detector mapping table, if not provided, call
-        rbsdmap(cfg) to compute
+	rbsdmap(cfg) to compute
     param/value: acceptable optional parameters include
-        'lambda': Tikhonov regularization parameter (0.05), overwrite recon.lambda
-        'report': 1 (default) to print residual and runtimes; 0: silent
-        'tol': convergence tolerance, if relative residual is less than
-               this value, stop, default is 0, which runs maxiter
-               iterations
-        'reform': 'real', 'complex' or 'logphase'
-        'mex':  whether to use mex file for Jacobian calculations
-        'prior': apply structure-prior-guided reconstruction,
-               supported methods include 'laplace' and 'comp' for use compositional-priors
+	'maxiter': number of iterations, default is 5
+	'lambda': Tikhonov regularization parameter (0.05), overwrite recon.lambda
+	'report': 1 (default) to print residual and runtimes; 0: silent
+	'tol': convergence tolerance, if relative residual is less than
+	       this value, stop, default is 0, which runs maxiter
+	       iterations
+	'reform': 'real': transform A*x=b so that A/x/b are all real
+		  'complex': do not transform A*x=b
+		  'logphase': transform Ax=b to [Alogamp,Aphase]*x=[log10(b),angle(b)]
+	'mex': 0 (default) use matlab native code rbjac to build Jacobian
+	       1: use mex-file rbfemmatrix to rapidly compute Jacobian
+		 on forward (dense) mesh then interpolate to coarse mesh
+	       2: call mex rbfemmatrix to build Jacobian directly on the
+		  recon mesh (coarse).
+	       setting mex to 2 gives the fastest speed (2x faster than 0)
+	'prior': apply structure-prior-guided reconstruction,
+	       supported methods include
+
+	       'laplace': this is also known as the "soft-prior", where
+		   the L matrix used in (J'J+lambda*L'L)dx=dy is a
+		   Laplace smoothing matrix where l(i,j)=1 if i=j or
+		   -1/N_seg if i~=j, where N_seg is the total number of
+		   nodes/elems that are within each label or region;
+		   recon.seg must be a vector of integer labels
+	       'comp': use compositional-priors, recon.seg must be a
+		   N-by-Nc matrix where N is the number of nodes, Nc is
+		   the number of tissue compositions, each element in the
+		   matrix must be a number between 0-1, denoting the
+		   volume fraction of each composition; the row-sum must
+		   be 1 for each node.
 
 output:
     recon: the updated recon structure, containing recon mesh and
-         reconstructed values in recon.prop or recon.param
+	 reconstructed values in recon.prop or recon.param
     resid: the residual betweet the model and the measurement data for
-         each iteration
+	 each iteration
     cfg: the updated cfg structure, containing forward mesh and
-         reconstructed values in cfg.prop or cfg.param
+	 reconstructed values in cfg.prop or cfg.param
     updates: a struct array, where the i-th element stores the update
-         vectors for each unknown block
+	 vectors for each unknown block
     Jmua: Jacobian in a struct form, each element is the Jacobian of an
-         unknown block
+	 unknown block
     detphi: the final model prediction that best fits the data detphi0
     phi: the final forward solutions resulting from the estimation
 ```

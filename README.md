@@ -16,8 +16,12 @@
 - [Introduction](#introduction)
 - [How to Install](#how-to-install)
 - [Workflow Overview](#workflow-overview)
+- [Redbird Function Overview](#redbird-function-overview)
+- [How to Install](#how-to-install)
+- [Data Structures](#data-structures)
+  - [Forward Data Structure `cfg`](#forward-data-structure-cfg)
+  - [Inverse Data Structure `recon`](#inverse-data-structure-cfg)
 - [How to Use](#how-to-use)
-  - [Input Data Structure](#input-data-structure)
   - [Streamlined Forward and Inverse Solvers](#streamlined-forward-and-inverse-solvers)
     - [rbrun](#rbrun)
     - [rbrunforward](#rbrunforward)
@@ -87,7 +91,7 @@ Redbird supports four types of image reconstructions:
 
 ---
 
-## Redbird function overview
+## Redbird Function Overview
 
 ![function list](./doc/images/redbird_function_diagram.svg)
 
@@ -152,11 +156,11 @@ Specifically, the main Redbird functions are divided into the following groups
 
 ---
 
-## Data structures
+## Data Structures
 
 ![cfg structure](./doc/images/redbird_data_structures.svg)
 
-### Forward data structure `cfg`
+### Forward Data Structure `cfg`
 
 The forward solver in Redbird follows a very similar structure as those used by mcx and mmc (which are both forward solvers).
 
@@ -190,7 +194,7 @@ The following extra inputs are derived from the above inputs - they can be autom
 - `cfg.{rows,cols,idxcount}`: Redbird's FEM equation uses a Compressed Sparse Column (CSC) format to store the system matrix A, these are related to the sparse matrix columns returned by `rbfemnz`
 - `cfg.idxsum`: the cumsum() of `cfg.idxcount`, i.e. the starting index of the non-zero terms for each node in the serialized vector
 
-### Inverse data structure `recon`
+### Inverse Data Structure `recon`
 
 The inverse solver, `rbrunrecon(cfg, recon, detphi0)` needs both the forward data structure `cfg`, and a new inverse data structure `recon` to store and manage the recovered optical properties. Redbird supports a technique called "dual-mesh", allowing one to use a fine mesh to perform forward solver for high accuracy, and another independent, often times much coarser, recon mesh to store the optical properties to reduce the inverse linear system size and accelerate reconstruction.
 

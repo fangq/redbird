@@ -14,7 +14,7 @@ tic
 
 [no1, fc1] = mergemesh(nbox1, fbox1, nbox2, fbox2);          %# combine the two non-intersecting surfaces
 regionseed = [1, 1, 1        %# a seed point inside region 1 (large box)
-              11,11,11]      %# a seed point inside region 2 (small box)
+              11,11,11];      %# a seed point inside region 2 (small box)
 [cfg.node, cfg.elem] = s2m(no1,fc1,1,maxvol, 'tetgen', regionseed);  %# generate tetrahedral mesh - outer box: label 1, inner box: label 2
 
 cfg.seg = cfg.elem(:,5);    %# cfg.seg is similar to cfg.elemprop in mmclab, but also supports node-based labels

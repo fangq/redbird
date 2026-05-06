@@ -383,7 +383,7 @@ for iter = 1:maxiter
         for zz = 1:length(fieldnames(Jmua))
             if (zz <= length(intersect(fieldnames(Jmua), {'hbo', 'hbr', 'mua'})))
                 scalefact(zz) = 1 / sqrt(sum(sum(Jflat(:, (zz - 1) * cn + 1:zz * cn).^2)));
-            elseif (exist('Jd', 'var') &&  zz > length(intersect(fieldnames(Jmua), {'scatamp', 'scatpow', 'dcoeff'})))
+            elseif (exist('Jd', 'var') &&  zz > length(intersect(fieldnames(Jmua), {'scatamp', 'scatpow', 'scatamp500', 'scatpow500', 'dcoeff'})))
                 scalefact(zz) = 1 / sqrt(sum(sum(Jflat(:, (zz - 1) * cn + 1:zz * cn).^2))) .* musscale;
             end
 
@@ -455,7 +455,7 @@ for iter = 1:maxiter
                         cfg.prop = recon.prop;
                     end
                 end
-            case {'hbo', 'hbr', 'water', 'lipid', 'scatamp', 'scatpow'}
+            case {'hbo', 'hbr', 'water', 'lipid', 'scatamp', 'scatpow', 'scatamp500', 'scatpow500'}
                 if (isfield(recon, 'node')) % update recon mesh prop
                     recon.param.(output{i}) = recon.param.(output{i}) + dx;
                 else

@@ -58,7 +58,9 @@ for i = 1:length(wv)
     for j = 1:length(types)
         mua = mua + extin(j) * params.(types{j});
     end
-    if (isfield(cfg.param, 'scatamp') && isfield(cfg.param, 'scatpow'))
+    if (isfield(cfg.param, 'scatamp500') && isfield(cfg.param, 'scatpow500'))
+        musp = (cfg.param.('scatamp500') .* ((str2double(wavelen) ./ 500).^(-cfg.param.('scatpow500'))));
+    elseif (isfield(cfg.param, 'scatamp') && isfield(cfg.param, 'scatpow'))
         musp = (cfg.param.('scatamp') .* ((str2double(wavelen) .* 1e-9).^(-cfg.param.('scatpow'))));
     end
     segprop = cfg.prop(wavelen);

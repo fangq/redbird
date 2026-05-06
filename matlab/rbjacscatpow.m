@@ -1,6 +1,6 @@
-function [Jscatpow, dDdscatpow] = rbjacscatpow(Jd, dcoeff, wavelen)
+function [Jscatpow, dDdscatpow] = rbjacscatpow(Jd, dcoeff, wavelen, lref)
 %
-% [Jscatpow,dDdscatpow]=rbjacscatpow(Jd, dcoeff, wavelen)
+% [Jscatpow,dDdscatpow]=rbjacscatpow(Jd, dcoeff, wavelen, lref)
 %
 % Create the Jacobian matrix for the scattering power using the Jacobian
 % of the diffusion coeff (D)
@@ -10,7 +10,10 @@ function [Jscatpow, dDdscatpow] = rbjacscatpow(Jd, dcoeff, wavelen)
 % input:
 %     Jd: the jacobian of the diffusion coeff.
 %     dcoeff: the diffusion coefficient values at each node
-%     wavelen: the list of wavelengths
+%     wavelen: the list of wavelengths (in nm)
+%     lref: reference wavelength (in nm) used in the inverse power law
+%           musp = scatamp * (wavelen/lref)^(-scatpow). Default: 1e9 (legacy
+%           formula). Pass 500 for the 500 nm-normalized convention.
 %
 % output:
 %     Jscatpow: the Jacobian of the scattering power parameter
@@ -22,7 +25,10 @@ function [Jscatpow, dDdscatpow] = rbjacscatpow(Jd, dcoeff, wavelen)
 % -- this function is part of Redbird-m toolbox
 %
 
-% dDdscatpow=dcoeff.*log(wavelen/500);
-dDdscatpow = dcoeff .* log(wavelen .* 1e-9);
+if (nargin < 4 || isempty(lref))
+    lref = 1e9;
+end
+
+dDdscatpow = dcoeff .* log(wavelen ./ lref);
 
 Jscatpow = Jd .* dDdscatpow;

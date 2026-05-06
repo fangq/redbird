@@ -22,7 +22,7 @@ s2 = [90 20 20];
 [nosp, fcsp] = meshasphere(s0, 5, 1);
 [nosp2, fcsp2] = meshasphere(s2, 7.5, 1);
 [no, fc] = mergemesh(nobbx, fcbbx, nosp, fcsp);
-[no, fc] = mergemesh(no, fc(:,1:3), nosp2, fcsp2);
+[no, fc] = mergemesh(no, fc(:, 1:3), nosp2, fcsp2);
 
 [cfg0.node, cfg0.elem] = s2m(no, fc(:, 1:3), 1, 20, 'tetgen', [11 1 1; s0; s2]);
 

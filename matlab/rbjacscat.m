@@ -1,6 +1,6 @@
-function Jscat = rbjacscat(Jd, dcoeff, scatpow, wv)
+function Jscat = rbjacscat(Jd, dcoeff, scatpow, wv, lref, suffix)
 %
-% Jscat=rbjacchrome(Jmua, dcoeff, wv)
+% Jscat=rbjacscat(Jd, dcoeff, scatpow, wv, lref, suffix)
 %
 % Building the Jacobian matrices for scattering-amplitude and
 % scattering-power from Jacobian of the diffusion coeff
@@ -12,9 +12,16 @@ function Jscat = rbjacscat(Jd, dcoeff, scatpow, wv)
 %     dcoeff: the current diffusion coeff at each node
 %     scatpow: the current scattering power at each node
 %     wv: wavelength list, if not given, Jd must be a containers.Map
+%     lref: reference wavelength (in nm) used in the inverse power law
+%           musp = scatamp * (wavelen/lref)^(-scatpow). Default: 1e9 (legacy
+%           formula). Pass 500 for the 500 nm-normalized convention.
+%     suffix: suffix appended to the output field names, default ''.
+%             Pass '500' so the fields are named scatamp500/scatpow500
+%             when using the 500 nm-normalized convention.
 %
 % output:
 %     Jscat: the Jacobian in a struct as Jscat.{scatamp,scatpow}
+%            (or Jscat.{scatamp500,scatpow500} when suffix='500')
 %
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details
@@ -25,24 +32,29 @@ function Jscat = rbjacscat(Jd, dcoeff, scatpow, wv)
 if (nargin < 4)
     wv = keys(Jd);
 end
+if (nargin < 5 || isempty(lref))
+    lref = 1e9;
+end
+if (nargin < 6 || isempty(suffix))
+    suffix = '';
+end
+
+ampname = ['scatamp' suffix];
+powname = ['scatpow' suffix];
 
 % Jscat=[J(scatamp),J(scatpow)]
 if isa(Jd, 'containers.Map')
-    Jscat = struct('scatamp', [], 'scatpow', []);
+    Jscat = struct(ampname, [], powname, []);
     for i = 1:length(wv)
-        %     Jscat.scatamp(((i-1)*size(Jd(wv{i}),1)+1):(i)*size(Jd(wv{i}),1),:) =...
-        %         rbjacscatamp(Jd(wv{i}), dcoeff(wv{i}), str2double(wv{i}), scatpow);
-        %     Jscat.scatpow(((i-1)*size(Jd(wv{i}),1)+1):(i)*size(Jd(wv{i}),1),:) =...
-        %         rbjacscatpow(Jd(wv{i}), dcoeff(wv{i}), str2double(wv{i}));
-        Jscat.scatamp = [Jscat.scatamp; rbjacscatamp(Jd(wv{i}), dcoeff(wv{i}), str2double(wv{i}), scatpow)];
-        Jscat.scatpow = [Jscat.scatpow; rbjacscatpow(Jd(wv{i}), dcoeff(wv{i}), str2double(wv{i}))];
+        Jscat.(ampname) = [Jscat.(ampname); rbjacscatamp(Jd(wv{i}), dcoeff(wv{i}), str2double(wv{i}), scatpow, lref)];
+        Jscat.(powname) = [Jscat.(powname); rbjacscatpow(Jd(wv{i}), dcoeff(wv{i}), str2double(wv{i}), lref)];
     end
 elseif isstruct(Jd)
-    Jscat = struct('scatamp', {[], []}, 'scatpow', {[], []});
+    Jscat = struct(ampname, {[], []}, powname, {[], []});
     for ii = 1:2
         for ll = 1:length(wv)
-            Jscat(ii).scatamp = [Jscat(ii).scatamp; rbjacscatamp(Jd(ii).J(wv{ll}), dcoeff(wv{ll}), str2double(wv{ll}), scatpow)];
-            Jscat(ii).scatpow = [Jscat(ii).scatpow; rbjacscatpow(Jd(ii).J(wv{ll}), dcoeff(wv{ll}), str2double(wv{ll}))];
+            Jscat(ii).(ampname) = [Jscat(ii).(ampname); rbjacscatamp(Jd(ii).J(wv{ll}), dcoeff(wv{ll}), str2double(wv{ll}), scatpow, lref)];
+            Jscat(ii).(powname) = [Jscat(ii).(powname); rbjacscatpow(Jd(ii).J(wv{ll}), dcoeff(wv{ll}), str2double(wv{ll}), lref)];
         end
     end
 end

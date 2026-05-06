@@ -46,7 +46,9 @@ if (isa(Jmua, 'containers.Map') || (isstruct(Jmua) && isa(Jmua(1).J, 'containers
         %         end
     end
     paramlist = fieldnames(params);
-    if (nargin > 7 && length(intersect(paramlist, {'scatamp', 'scatpow'})) == 2)
+    has_norm_scat = (length(intersect(paramlist, {'scatamp500', 'scatpow500'})) == 2);
+    has_legacy_scat = (length(intersect(paramlist, {'scatamp', 'scatpow'})) == 2);
+    if (nargin > 7 && (has_norm_scat || has_legacy_scat))
         dcoeff = containers.Map();
         for i = 1:length(wv)
             dtemp = prop(wv{i});
@@ -55,7 +57,11 @@ if (isa(Jmua, 'containers.Map') || (isstruct(Jmua) && isa(Jmua(1).J, 'containers
             end
             dcoeff(wv{i}) = 1 ./ (3 .* (dtemp(:, 1) + dtemp(:, 2)))';
         end
-        Jscat = rbjacscat(Jd, dcoeff, params.scatpow, wv);
+        if (has_norm_scat)
+            Jscat = rbjacscat(Jd, dcoeff, params.scatpow500, wv, 500, '500');
+        else
+            Jscat = rbjacscat(Jd, dcoeff, params.scatpow, wv);
+        end
     end
     chromophores = intersect(paramlist, {'hbo', 'hbr', 'water', 'lipids', 'aa3'});
 

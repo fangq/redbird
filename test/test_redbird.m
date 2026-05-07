@@ -22,11 +22,19 @@ function pass = test_redbird(testname, fhandle, expected, varargin)
 % -- this function is part of Redbird-m toolbox
 %
 
-global RB_RTOL RB_ATOL RB_FAIL RB_TOTAL;
-if isempty(RB_RTOL); RB_RTOL = 1e-9; end
-if isempty(RB_ATOL); RB_ATOL = 1e-12; end
-if isempty(RB_FAIL); RB_FAIL = 0; end
-if isempty(RB_TOTAL); RB_TOTAL = 0; end
+global RB_RTOL RB_ATOL RB_FAIL RB_TOTAL
+if isempty(RB_RTOL)
+    RB_RTOL = 1e-9;
+end
+if isempty(RB_ATOL)
+    RB_ATOL = 1e-12;
+end
+if isempty(RB_FAIL)
+    RB_FAIL = 0;
+end
+if isempty(RB_TOTAL)
+    RB_TOTAL = 0;
+end
 
 RB_TOTAL = RB_TOTAL + 1;
 
@@ -39,7 +47,7 @@ if (ischar(expected) && strcmp(expected, 'error'))
     end
     pass = threw;
     report(testname, pass, 'expected an error');
-    return;
+    return
 end
 
 try
@@ -47,7 +55,7 @@ try
         fhandle(varargin{:});
         pass = true;
         report(testname, pass, 'no error');
-        return;
+        return
     end
     out = fhandle(varargin{:});
     [pass, msg] = compare(out, expected, RB_RTOL, RB_ATOL);
@@ -69,19 +77,19 @@ if isa(expected, 'function_handle')
     catch err
         why = sprintf('predicate threw: %s', err.message);
     end
-    return;
+    return
 end
 if isnumeric(expected) || islogical(expected)
     if ~isequal(size(actual), size(expected))
         why = sprintf('size mismatch: got [%s], expected [%s]', ...
                       sprintf('%d ', size(actual)), sprintf('%d ', size(expected)));
-        return;
+        return
     end
     a = double(actual(:));
     e = double(expected(:));
     if any(isnan(a) ~= isnan(e))
         why = 'NaN pattern mismatch';
-        return;
+        return
     end
     a(isnan(a)) = 0;
     e(isnan(e)) = 0;
@@ -94,54 +102,54 @@ if isnumeric(expected) || islogical(expected)
         why = sprintf('numerical mismatch at idx %d: |%g-%g|=%g > %g', ...
                       bad, a(bad), e(bad), diff(bad), tol(max(numel(tol), 1)));
     end
-    return;
+    return
 end
 if ischar(expected)
     ok = ischar(actual) && strcmp(actual, expected);
     if ~ok
         why = 'string mismatch';
     end
-    return;
+    return
 end
 if iscell(expected)
     if ~iscell(actual) || ~isequal(size(actual), size(expected))
         why = 'cell shape mismatch';
-        return;
+        return
     end
     for k = 1:numel(expected)
         [ok2, why2] = compare(actual{k}, expected{k}, rtol, atol);
         if ~ok2
             why = sprintf('cell{%d}: %s', k, why2);
-            return;
+            return
         end
     end
     ok = true;
-    return;
+    return
 end
 if isstruct(expected)
     if ~isstruct(actual)
         why = 'expected struct';
-        return;
+        return
     end
     fn = fieldnames(expected);
     for k = 1:numel(fn)
         if ~isfield(actual, fn{k})
             why = sprintf('missing field %s', fn{k});
-            return;
+            return
         end
         [ok2, why2] = compare(actual.(fn{k}), expected.(fn{k}), rtol, atol);
         if ~ok2
             why = sprintf('field %s: %s', fn{k}, why2);
-            return;
+            return
         end
     end
     ok = true;
-    return;
+    return
 end
 why = sprintf('unsupported expected type %s', class(expected));
 
 function report(testname, pass, msg)
-global RB_FAIL;
+global RB_FAIL
 if pass
     fprintf(1, 'Testing %s: ok\n', testname);
 else

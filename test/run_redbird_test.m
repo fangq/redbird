@@ -37,14 +37,13 @@ if (nargin == 0)
     tests = {'util', 'jac', 'prop', 'mesh', 'forward', 'solver', 'recon'};
 end
 
-global RB_FAIL RB_TOTAL;
+global RB_FAIL RB_TOTAL
 RB_FAIL = 0;
 RB_TOTAL = 0;
 
 if (~exist('rbrun', 'file'))
-    addpath(fullfile(fileparts(mfilename('fullpath')), '..', 'matlab'));
+    addpath([fileparts(which(mfilename)) filesep '..' filesep 'matlab']);
 end
-addpath(fileparts(mfilename('fullpath')));
 
 bar = char(ones(1, 79) * 61);
 

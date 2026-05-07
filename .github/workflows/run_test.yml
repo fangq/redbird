@@ -1,0 +1,70 @@
+name: Redbird CI
+
+on: [push, pull_request]
+
+jobs:
+  octave_test:
+    name: Octave tests
+    strategy:
+      fail-fast: false
+      # provided octave versions: ubuntu-22.04 = 6.4, ubuntu-24.04 = 8.4, macos-15-intel = 10.3, windows-2022 = 10.3
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, macos-15-intel, windows-2022]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout redbird
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+          path: redbird
+      - name: Clone runtime dependencies (iso2mesh, jsonlab)
+        run: |
+          git clone --depth 1 https://github.com/fangq/iso2mesh.git iso2mesh
+          git clone --depth 1 https://github.com/fangq/jsonlab.git jsonlab
+      - name: Install Octave
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get update && sudo apt-get install -y octave
+          elif [[ "$RUNNER_OS" == "macOS" ]]; then
+            brew install octave
+          elif [[ "$RUNNER_OS" == "Windows" ]]; then
+            curl --retry 3 -kL http://cdimage.debian.org/mirror/gnu.org/gnu/octave/windows/octave-10.3.0-w64-64.7z --output octave_10.3.0.7z
+            7z x octave_10.3.0.7z -ooctave -y
+            echo "$PWD/octave/octave-10.3.0-w64-64/mingw64/bin" >> $GITHUB_PATH
+            echo "JAVA_HOME=$JAVA_HOME_11_X64" >> $GITHUB_ENV
+          fi
+      - name: Run tests
+        run: |
+          octave-cli --version
+          octave-cli --eval "addpath(genpath('iso2mesh')); addpath('jsonlab'); cd redbird/test; run_redbird_test"
+
+  matlab_test:
+    name: MATLAB tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15-intel, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout redbird
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+          path: redbird
+      - name: Clone runtime dependencies (iso2mesh, jsonlab)
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/fangq/iso2mesh.git iso2mesh
+          git clone --depth 1 https://github.com/fangq/jsonlab.git jsonlab
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+        with:
+          release: R2022a
+      - name: Run MATLAB tests
+        uses: matlab-actions/run-command@v2
+        with:
+          command: addpath(genpath('iso2mesh')); addpath('jsonlab'); cd redbird/test; run_redbird_test

@@ -40,7 +40,7 @@ jobs:
       - name: Run tests
         run: |
           octave-cli --version
-          octave-cli --eval "addpath(genpath('iso2mesh')); addpath('jsonlab'); cd redbird/test; run_redbird_test"
+          octave-cli --eval "addpath('iso2mesh'); addpath('jsonlab'); cd redbird/test; run_redbird_test"
 
   matlab_test:
     name: MATLAB tests
@@ -67,4 +67,4 @@ jobs:
       - name: Run MATLAB tests
         uses: matlab-actions/run-command@v2
         with:
-          command: addpath(genpath('iso2mesh')); addpath('jsonlab'); cd redbird/test; run_redbird_test
+          command: addpath('iso2mesh'); addpath('jsonlab'); cd redbird/test; run_redbird_test

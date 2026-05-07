@@ -24,11 +24,12 @@ jobs:
       - name: Clone runtime dependencies (iso2mesh, jsonlab)
         run: |
           git clone --depth 1 https://github.com/fangq/iso2mesh.git iso2mesh
-          git clone --depth 1 https://github.com/fangq/jsonlab.git jsonlab
+          git clone --depth 1 https://github.com/NeuroJSON/jsonlab.git jsonlab
       - name: Install Octave
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             sudo apt-get update && sudo apt-get install -y octave
+            ls -lt
           elif [[ "$RUNNER_OS" == "macOS" ]]; then
             brew install octave
           elif [[ "$RUNNER_OS" == "Windows" ]]; then
@@ -40,7 +41,7 @@ jobs:
       - name: Run tests
         run: |
           octave-cli --version
-          octave-cli --eval "addpath('iso2mesh'); addpath('jsonlab'); cd redbird/test; run_redbird_test"
+          octave-cli --eval "addpath('iso2mesh'); addpath('jsonlab'); addpath('matlab'); cd redbird/test; run_redbird_test"
 
   matlab_test:
     name: MATLAB tests

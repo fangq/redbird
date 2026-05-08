@@ -31,11 +31,7 @@ if (~isfield(cfg, 'bulk'))
         prop = containers.Map();
         bkprop = containers.Map();
         if (~isa(cfg.prop, 'containers.Map'))
-            % use a non-empty synthetic key: Octave 8.4's containers.Map
-            % crashes in sort_keys -> orderfields -> cell2struct when a key
-            % is the empty string. The key never leaks: the single-key
-            % short-circuit below unwraps the value before returning.
-            prop('1') = cfg.prop;
+            prop('_') = cfg.prop;
         else
             prop = cfg.prop;
         end

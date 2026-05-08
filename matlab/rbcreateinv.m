@@ -45,14 +45,14 @@ if (nargin < 4)
     param = [];
 end
 
-wavelengths = {''};
+wavelengths = {'_'};
 
 if (isa(Amat, 'containers.Map'))
     wavelengths = Amat.keys;
 else
-    Amat = containers.Map({''}, {Amat});
-    ymeas = containers.Map({''}, {ymeas});
-    ymodel = containers.Map({''}, {ymodel});
+    Amat = containers.Map({'_'}, {Amat});
+    ymeas = containers.Map({'_'}, {ymeas});
+    ymodel = containers.Map({'_'}, {ymodel});
 end
 
 newA = containers.Map();

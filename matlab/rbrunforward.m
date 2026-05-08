@@ -144,16 +144,17 @@ if (~isfield(cfg, 'deldotdel'))
     cfg.deldotdel = rbdeldotdel(cfg);
 end
 
-wavelengths = {''};
+wavelengths = {'_'};   % non-empty, non-numeric placeholder for the single-wavelength case (kept internal; unwrapped before return)
 if (isa(cfg.prop, 'containers.Map'))
     wavelengths = cfg.prop.keys;
 end
-sd = jsonopt('sd', containers.Map(wavelengths, cell(1, length(wavelengths))), opt);
-if (isempty(sd(wavelengths{1})))
+if isfield(opt, 'sd') && ~isempty(opt.sd)
+    sd = opt.sd;
+else
     sd = rbsdmap(cfg);
-    if (~isa(sd, 'containers.Map'))
-        sd = containers.Map(wavelengths, {sd});
-    end
+end
+if (~isa(sd, 'containers.Map'))
+    sd = containers.Map(wavelengths, {sd});
 end
 
 Amat = containers.Map();

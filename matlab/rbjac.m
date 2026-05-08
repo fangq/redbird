@@ -42,14 +42,14 @@ else
 end
 nelem = size(felem, 1);
 
-wavelengths = {''};
+wavelengths = {'_'};
 
 if isstruct(phi)
     if (isa(phi(1).phi, 'containers.Map'))
         wavelengths = phi(1).phi.keys;
     else
         for ii = 1:length(phi)
-            phi(ii).phi = containers.Map({''}, {phi(ii).phi});
+            phi(ii).phi = containers.Map({'_'}, {phi(ii).phi});
         end
     end
 else
@@ -62,7 +62,7 @@ else
     else
         phitemp = phi;
         clear phi;
-        phi(rfcw).phi = containers.Map({''}, {phitemp});
+        phi(rfcw).phi = containers.Map({'_'}, {phitemp});
         clear phitemp;
     end
 end

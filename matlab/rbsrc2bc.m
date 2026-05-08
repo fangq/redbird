@@ -39,7 +39,7 @@ if (~isdet)
     if isfield(cfg, 'widesrcid')
         widesrcid = cfg.widesrcid;
         if ~isa(widesrcid, 'containers.Map')
-            widesrcid = containers.Map({''}, {widesrcid});
+            widesrcid = containers.Map({'_'}, {widesrcid});
         end
     else
         tempwf.srctype = {cfg.srctype};
@@ -60,7 +60,7 @@ if (~isdet)
         if isfield(cfg, 'srcweight')
             tempwf.srcweight = {cfg.srcweight};
         end
-        widesrcid = containers.Map({''}, {tempwf});
+        widesrcid = containers.Map({'_'}, {tempwf});
         clear tempwf;
     end
 else
@@ -72,7 +72,7 @@ else
     if isfield(cfg, 'widedetid')
         widesrcid = cfg.widedetid;
         if ~isa(widesrcid, 'containers.Map')
-            widesrcid = containers.Map({''}, {widesrcid});
+            widesrcid = containers.Map({'_'}, {widesrcid});
         end
     else
         tempwf.srctype = {cfg.dettype};
@@ -93,7 +93,7 @@ else
         if isfield(cfg, 'detweight')
             tempwf.srcweight = {cfg.detweight};
         end
-        widesrcid = containers.Map({''}, {tempwf});
+        widesrcid = containers.Map({'_'}, {tempwf});
         clear tempwf;
     end
 end
@@ -101,7 +101,7 @@ end
 if isa(cfg.prop, 'containers.Map')
     prop = cfg.prop;
 else
-    prop = containers.Map({''}, {cfg.prop});
+    prop = containers.Map({'_'}, {cfg.prop});
 end
 
 if (~isequal(cell2mat(widesrcid.keys), cell2mat(prop.keys)) && (~isempty(cell2mat(widesrcid.keys))))

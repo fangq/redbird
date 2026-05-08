@@ -26,12 +26,12 @@ if (nargin < 3 || isempty(sd) || isempty(phi) || isempty(nvol))
     error('you must give at least the first 3 inputs and they must not be empty');
 end
 
-wavelengths = {''};
+wavelengths = {'_'};
 
 if (isa(phi, 'containers.Map'))
     wavelengths = phi.keys;
 else
-    phi = containers.Map({''}, {phi});
+    phi = containers.Map({'_'}, {phi});
 end
 
 Jmua = containers.Map();

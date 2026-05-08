@@ -41,8 +41,34 @@ end
 prop = containers.Map();
 params = cfg.param;
 
+ishelmholtz = isfield(params, 'epsilon') || isfield(params, 'sigma');
+
 for i = 1:length(wv)
     wavelen = wv{i};
+    segprop = cfg.prop(wavelen);
+    if (ishelmholtz)
+        if (isfield(params, 'epsilon'))
+            eps_r = params.epsilon;
+        else
+            eps_r = ones(size(params.sigma));
+        end
+        if (isfield(params, 'sigma'))
+            sigma = params.sigma;
+        else
+            sigma = zeros(size(params.epsilon));
+        end
+        if (length(eps_r) < min([size(cfg.node, 1), size(cfg.elem, 1)])) % label-based
+            segprop(length(eps_r) + 2:end, :) = [];
+            segprop(2:end, 1) = eps_r(:);
+            segprop(2:end, 2) = sigma(:);
+            prop(wavelen) = segprop;
+        else
+            mu0col = segprop(2, 3) * ones(size(eps_r(:)));
+            ncol = segprop(2, 4) * ones(size(eps_r(:)));
+            prop(wavelen) = [eps_r(:) sigma(:) mu0col ncol];
+        end
+        continue
+    end
     if ~isfield(params, 'water')
         params.water = 0.23;
     end
@@ -63,7 +89,6 @@ for i = 1:length(wv)
     elseif (isfield(cfg.param, 'scatamp') && isfield(cfg.param, 'scatpow'))
         musp = (cfg.param.('scatamp') .* ((str2double(wavelen) .* 1e-9).^(-cfg.param.('scatpow'))));
     end
-    segprop = cfg.prop(wavelen);
     if (length(mua) < min([size(cfg.node, 1), size(cfg.elem, 1)])) % label-based properties
         segprop(length(mua) + 2:end, :) = [];
         segprop(2:end, 1) = mua(:);

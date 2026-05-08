@@ -11,8 +11,10 @@ function bkprop = rbgetbulk(cfg)
 %     cfg: the forward simulation data structure
 %
 % output:
-%     bkprop: the optical property quadruplet in the order of
-%             [mua(1/mm), mus(1/mm), g, n]
+%     bkprop: the property quadruplet of the bulk medium. for DOT
+%             (diffusion equation), the order is [mua(1/mm), mus(1/mm), g, n];
+%             for MWT (Helmholtz equation), the order is
+%             [eps_r, sigma(S/mm), mu0(H/mm), n].
 %         if single wavelength, and a containers.Map object made of the
 %         above quadruplet for each wavelength.
 %
@@ -22,7 +24,11 @@ function bkprop = rbgetbulk(cfg)
 % -- this function is part of Redbird-m toolbox
 %
 
-bkprop = [0 0 0 1.37];
+if (isfield(cfg, 'bulk') && (isfield(cfg.bulk, 'epsilon') || isfield(cfg.bulk, 'sigma')))
+    bkprop = [1 0 4 * pi * 1e-10 1];
+else
+    bkprop = [0 0 0 1.37];
+end
 
 if (~isfield(cfg, 'bulk'))
     if (isfield(cfg, 'prop') && ~isempty(cfg.prop))
@@ -79,6 +85,15 @@ else
     end
     if (isfield(cfg.bulk, 'g'))
         bkprop(3) = cfg.bulk.g;
+    end
+    if (isfield(cfg.bulk, 'epsilon'))
+        bkprop(1) = cfg.bulk.epsilon;
+    end
+    if (isfield(cfg.bulk, 'sigma'))
+        bkprop(2) = cfg.bulk.sigma;
+    end
+    if (isfield(cfg.bulk, 'mu0'))
+        bkprop(3) = cfg.bulk.mu0;
     end
     if (isfield(cfg.bulk, 'n'))
         bkprop(4) = cfg.bulk.n;

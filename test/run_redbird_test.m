@@ -34,16 +34,14 @@ function run_redbird_test(tests)
 %
 
 if (nargin == 0)
-    tests = {'util', 'jac', 'prop', 'mesh', 'forward', 'solver', 'recon'};
+    tests = {'util', 'jac', 'prop', 'mesh', 'forward', 'solver', 'recon', 'mwt'};
 end
 
 global RB_FAIL RB_TOTAL
 RB_FAIL = 0;
 RB_TOTAL = 0;
 
-if (~exist('rbrun', 'file'))
-    addpath([fileparts(which(mfilename)) filesep '..' filesep 'matlab']);
-end
+addpath([fileparts(which(mfilename)) filesep '..' filesep 'matlab']);
 
 bar = char(ones(1, 79) * 61);
 
@@ -86,6 +84,11 @@ if (ismember('recon', tests) && exist('meshabox', 'file'))
     test_recon();
 elseif ismember('recon', tests)
     fprintf(2, '[skip] ''recon'' requires iso2mesh\n');
+end
+
+if (ismember('mwt', tests))
+    fprintf(1, '%s\nMicrowave tomography (Helmholtz + RBC)\n%s\n', bar, bar);
+    test_mwt();
 end
 
 fprintf(1, '%s\n', bar);
@@ -590,3 +593,194 @@ test_redbird('rbrunrecon residual final <= initial', ...
              @(d) d <= 1e-9, true, resid_multi(end) - resid_multi(1));
 test_redbird('rbrunrecon all residuals positive', ...
              @(x) all(x > 0), true, resid_multi);
+
+% =========================================================================
+function test_mwt()
+
+% mu0_mm = 4*pi*1e-10 H/mm and eps0_mm = 8.854187817e-15 F/mm are the
+% values used internally; tests verify the same constants.
+mu0_mm = 4 * pi * 1e-10;
+eps0_mm = 8.854187817e-15;
+
+% ---- rbgetbulk MWT ----
+cfgM = struct('bulk', struct('epsilon', 78, 'sigma', 1e-3, 'n', sqrt(78)));
+bk = rbgetbulk(cfgM);
+test_redbird('rbgetbulk MWT eps_r', @() bk(1), 78);
+test_redbird('rbgetbulk MWT sigma', @() bk(2), 1e-3);
+test_redbird('rbgetbulk MWT default mu0', @() bk(3), mu0_mm);
+test_redbird('rbgetbulk MWT n', @() bk(4), sqrt(78));
+
+cfgM2 = struct('bulk', struct('epsilon', 1));
+bk2 = rbgetbulk(cfgM2);
+test_redbird('rbgetbulk MWT minimal: sigma defaults to 0', @() bk2(2), 0);
+test_redbird('rbgetbulk MWT minimal: mu0 = 4*pi*1e-10', @() bk2(3), mu0_mm);
+
+% ---- rbupdateprop MWT (label-based, 2 labels over a small mesh) ----
+cfgU = struct;
+cfgU.node = [0 0 0; 1 0 0; 0 1 0; 0 0 1; 0.5 0.5 0.5];
+cfgU.elem = [1 2 3 4; 1 2 3 5; 1 2 4 5];
+cfgU.seg = [1; 1; 2];
+cfgU.param = struct('epsilon', [40 60], 'sigma', [0.5e-3 1.0e-3]);
+cfgU.prop = containers.Map({'5e8'}, {[1 0 mu0_mm 1; 1 0 mu0_mm 1; 1 0 mu0_mm 1]});
+propnew = rbupdateprop(cfgU);
+p = propnew('5e8');
+test_redbird('rbupdateprop MWT epsilon (label 1)', @() p(2, 1), 40);
+test_redbird('rbupdateprop MWT epsilon (label 2)', @() p(3, 1), 60);
+test_redbird('rbupdateprop MWT sigma (label 1)', @() p(2, 2), 0.5e-3);
+test_redbird('rbupdateprop MWT preserves mu0', @() p(2, 3), mu0_mm);
+
+% ---- mesh-dependent tests ----
+if (~exist('meshabox', 'file'))
+    fprintf(2, '[skip] ''mwt'' mesh tests require iso2mesh\n');
+    return
+end
+
+% ---- rbmeshprep MWT precomputations ----
+cfgF = struct;
+[cfgF.node, cfgF.face, cfgF.elem] = meshabox([0 0 0], [40 40 40], 8);
+cfgF.seg = ones(size(cfgF.elem, 1), 1);
+cfgF.srcpos = [10 20 0];
+cfgF.detpos = [30 20 40];
+cfgF.srcdir = [0 0 1];
+cfgF.detdir = [0 0 -1];
+cfgF.bulk = struct('epsilon', 1, 'sigma', 0, 'n', 1);
+cfgF.prop = containers.Map({'5e8'}, {[1 0 mu0_mm 1; 1 0 mu0_mm 1]});
+cfgF.omega = 2 * pi * 5e8;
+cfgF = rbmeshprep(cfgF);
+
+test_redbird('rbmeshprep MWT adds facenb', @isfield, true, cfgF, 'facenb');
+test_redbird('rbmeshprep MWT facenb has 4 columns', @() size(cfgF.facenb, 2), 4);
+test_redbird('rbmeshprep MWT adds facecenter', @isfield, true, cfgF, 'facecenter');
+test_redbird('rbmeshprep MWT adds facenormal', @isfield, true, cfgF, 'facenormal');
+test_redbird('rbmeshprep MWT adds facer', @isfield, true, cfgF, 'facer');
+test_redbird('rbmeshprep MWT adds rbcorigin', @isfield, true, cfgF, 'rbcorigin');
+test_redbird('rbmeshprep MWT skips reff (DOT-only)', ...
+             @(c) ~isfield(c, 'reff'), true, cfgF);
+test_redbird('rbmeshprep MWT facenormal unit length', ...
+             @(x) max(abs(sqrt(sum(x.^2, 2)) - 1)) < 1e-9, true, cfgF.facenormal);
+test_redbird('rbmeshprep MWT facer is positive', ...
+             @(x) all(x > 0), true, cfgF.facer);
+
+% ---- line source via 6-column srcpos ----
+cfgL = struct;
+[cfgL.node, cfgL.face, cfgL.elem] = meshabox([0 0 0], [40 40 40], 8);
+cfgL.seg = ones(size(cfgL.elem, 1), 1);
+cfgL.srcpos = [20 20 0 20 20 40];   % single line through the box
+cfgL.detpos = [10 10 0 10 10 40];
+cfgL.bulk = struct('epsilon', 1, 'sigma', 0, 'n', 1);
+cfgL.prop = containers.Map({'5e8'}, {[1 0 mu0_mm 1; 1 0 mu0_mm 1]});
+cfgL.omega = 2 * pi * 5e8;
+cfgL = rbmeshprep(cfgL);
+
+test_redbird('line srcpos -> widesrc populated', @isfield, true, cfgL, 'widesrc');
+test_redbird('line detpos -> widedet populated', @isfield, true, cfgL, 'widedet');
+test_redbird('widesrc has 1 row per line src', ...
+             @() size(cfgL.widesrc, 1), 1);
+test_redbird('widesrc is non-zero', ...
+             @(x) any(abs(x(:)) > 0), true, cfgL.widesrc);
+test_redbird('widesrc is complex (MWT amp scaling -j*w*mu0)', ...
+             @(x) ~isreal(x), true, cfgL.widesrc);
+
+% ---- end-to-end MWT forward smoke test ----
+[detphi, phi] = rbrunforward(cfgL);
+test_redbird('MWT forward: phi finite', ...
+             @(x) all(isfinite(x(:))), true, phi);
+test_redbird('MWT forward: phi complex', ...
+             @(x) ~isreal(x), true, phi);
+test_redbird('MWT forward: phi non-trivial', ...
+             @(x) max(abs(x(:))) > 0, true, phi);
+test_redbird('MWT forward: detphi finite', ...
+             @(x) all(isfinite(x(:))), true, detphi);
+
+% ---- DOT regression: line source for DOT works too ----
+cfgD = struct;
+[cfgD.node, cfgD.face, cfgD.elem] = meshabox([0 0 0], [40 40 40], 8);
+cfgD.seg = ones(size(cfgD.elem, 1), 1);
+cfgD.srcpos = [20 20 0 20 20 40];
+cfgD.detpos = [10 10 35 30 30 35];
+cfgD.prop = [0 0 1 1; 0.01 1 0 1.37];
+cfgD.omega = 0;
+cfgD = rbmeshprep(cfgD);
+test_redbird('line source for DOT also works', ...
+             @() size(cfgD.widesrc, 1), 1);
+detD = rbrunforward(cfgD);
+test_redbird('DOT line-src forward returns finite', ...
+             @(x) all(isfinite(x(:))), true, detD);
+
+% ---- analytic checks: k-formula and physics-driven invariants ----
+
+% k_bg formula: in vacuum (eps_r=1, sigma=0), k = omega / c with c in mm/s.
+c0_mm = 1 / sqrt(mu0_mm * eps0_mm);   % ~ 2.998e11 mm/s
+omega_test = 2 * pi * 5e8;
+k_vac = sqrt(omega_test^2 * mu0_mm * eps0_mm * 1 - 1j * omega_test * mu0_mm * 0);
+test_redbird('MWT k formula: k(vacuum) = omega/c', ...
+             @(d) abs(d) < 1e-15, true, abs(real(k_vac) - omega_test / c0_mm));
+test_redbird('MWT k formula: vacuum is lossless (Im(k)=0)', ...
+             @() imag(k_vac), 0);
+
+% Lossy medium: Im(k) > 0 magnitude consistent with -j*omega*mu*sigma.
+% For sigma > 0, Im(k^2) < 0, so principal sqrt has Re > 0 and Im < 0,
+% giving exp(-j*k*r) decay (since j*(-Im(k)) = +Im(k) makes the exponent
+% acquire a negative real part).
+k_lossy = sqrt(omega_test^2 * mu0_mm * eps0_mm * 1 - 1j * omega_test * mu0_mm * 1e-3);
+test_redbird('MWT k(lossy): Im(k) negative for sigma>0', ...
+             @(x) x < 0, true, imag(k_lossy));
+
+% ---- reciprocity: detphi(2->1) == detphi(1->2) when geometry permits ----
+% A complex-symmetric (A = A.', not Hermitian) Helmholtz FEM matrix gives
+% reciprocity between any two antennas.  Use two distinct line antennas so
+% the sd map doesn't reduce to self-pairs.
+cfgR = struct;
+[cfgR.node, cfgR.face, cfgR.elem] = meshabox([0 0 0], [40 40 40], 8);
+cfgR.seg = ones(size(cfgR.elem, 1), 1);
+cfgR.srcpos = [10 20  5 10 20 35
+               30 20  5 30 20 35];
+cfgR.detpos = [10 20  5 10 20 35
+               30 20  5 30 20 35];
+cfgR.bulk = struct('epsilon', 4, 'sigma', 1e-4, 'n', 2);
+cfgR.prop = containers.Map({'5e8'}, {[1 0 mu0_mm 1; 4 1e-4 mu0_mm 2]});
+cfgR.omega = 2 * pi * 5e8;
+cfgR = rbmeshprep(cfgR);
+detphi_R = rbrunforward(cfgR);
+
+% off-diagonal entries are antenna1<->antenna2 measurements; should match.
+recip_err = abs(detphi_R(1, 2) - detphi_R(2, 1)) / max(abs(detphi_R(1, 2)), abs(detphi_R(2, 1)));
+test_redbird('MWT reciprocity: detphi(2->1) == detphi(1->2)', ...
+             @(r) r < 1e-6, true, recip_err);
+
+% ---- attenuation: lossy medium produces smaller |E| than lossless ----
+cfgLF = struct;
+[cfgLF.node, cfgLF.face, cfgLF.elem] = meshabox([0 0 0], [40 40 40], 8);
+cfgLF.seg = ones(size(cfgLF.elem, 1), 1);
+cfgLF.srcpos = [10 20 5 10 20 35];
+cfgLF.detpos = [30 20 5 30 20 35];
+cfgLF.omega = 2 * pi * 5e8;
+% lossless reference
+cfgLF.bulk = struct('epsilon', 4, 'sigma', 0, 'n', 2);
+cfgLF.prop = containers.Map({'5e8'}, {[1 0 mu0_mm 1; 4 0 mu0_mm 2]});
+cfgLF = rbmeshprep(cfgLF);
+detphi_lossless = rbrunforward(cfgLF);
+
+% lossy version with same geometry/permittivity
+cfgLY = struct;
+[cfgLY.node, cfgLY.face, cfgLY.elem] = meshabox([0 0 0], [40 40 40], 8);
+cfgLY.seg = ones(size(cfgLY.elem, 1), 1);
+cfgLY.srcpos = [10 20 5 10 20 35];
+cfgLY.detpos = [30 20 5 30 20 35];
+cfgLY.omega = 2 * pi * 5e8;
+cfgLY.bulk = struct('epsilon', 4, 'sigma', 1e-3, 'n', 2);
+cfgLY.prop = containers.Map({'5e8'}, {[1 0 mu0_mm 1; 4 1e-3 mu0_mm 2]});
+cfgLY = rbmeshprep(cfgLY);
+detphi_lossy = rbrunforward(cfgLY);
+
+test_redbird('MWT lossy medium attenuates relative to lossless', ...
+             @(r) r < 1, true, abs(detphi_lossy(1)) / abs(detphi_lossless(1)));
+
+% ---- frequency scaling: in a lossless medium, k = omega/c and Re(k)
+% scales linearly with omega (10x frequency -> 10x wavenumber). ----
+omega_lo = 2 * pi * 5e8;
+omega_hi = 2 * pi * 5e9;
+k_lo = sqrt(omega_lo^2 * mu0_mm * eps0_mm);   % lossless vacuum
+k_hi = sqrt(omega_hi^2 * mu0_mm * eps0_mm);
+test_redbird('MWT k(omega): Re(k) scales linearly with omega in lossless', ...
+             @(r) abs(r - 10) < 1e-9, true, real(k_hi) / real(k_lo));

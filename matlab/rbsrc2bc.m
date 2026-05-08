@@ -30,6 +30,24 @@ if (nargin < 2)
     isdet = 0;
 end
 
+% line-source path (works for both DOT and MWT): when cfg.srcpos has 6 columns,
+% columns 1-3 are the start point and columns 4-6 are the end point of a line
+% segment source. Each line is traced through the tet mesh and contributes a
+% sparse RHS column built from per-tet line integrals of the linear basis.
+% the same applies to cfg.detpos when isdet == 1.
+if (~isdet && isfield(cfg, 'srcpos') && size(cfg.srcpos, 2) >= 6)
+    cfg.srcpos0 = cfg.srcpos;
+    cfg.widesrc = lineseg2rhs(cfg.srcpos, cfg);
+    cfg.srcpos = zeros(0, 3);
+    return
+end
+if (isdet && isfield(cfg, 'detpos') && size(cfg.detpos, 2) >= 6)
+    cfg.detpos0 = cfg.detpos;
+    cfg.widedet = lineseg2rhs(cfg.detpos, cfg);
+    cfg.detpos = zeros(0, 3);
+    return
+end
+
 if (~isdet)
     if ((~isfield(cfg, 'srctype') && ~isfield(cfg, 'widesrcid')) || (isfield(cfg, 'srctype') && (strcmp(cfg.srctype, 'pencil') || strcmp(cfg.srctype, 'isotropic'))))
         return
@@ -290,4 +308,104 @@ else
     cfg.widedet = widesrc;
     cfg.wfdetmapping = wfsrcmapping;
     cfg.detpos = sources;
+end
+
+function widesrc = lineseg2rhs(linesegs, cfg)
+% build the RHS for each line segment source (columns of the result are the
+% RHS contribution at all Nn nodes; one row per line). For Helmholtz, scale
+% by -j*omega*mu0 (mu0 in H/mm).
+
+ns = size(linesegs, 1);
+nn = size(cfg.node, 1);
+widesrc = zeros(ns, nn);
+
+for s = 1:ns
+    rowvec = traceline(linesegs(s, 1:3), linesegs(s, 4:6), cfg);
+    widesrc(s, :) = rowvec;
+end
+
+if isfield(cfg, 'srcweight') && numel(cfg.srcweight) == ns
+    widesrc = widesrc .* cfg.srcweight(:);
+end
+
+ishelmholtz = isfield(cfg, 'bulk') && (isfield(cfg.bulk, 'epsilon') || isfield(cfg.bulk, 'sigma'));
+if (ishelmholtz)
+    mu0_mm = 4 * pi * 1e-10;
+    if isa(cfg.omega, 'containers.Map')
+        kk = cfg.omega.keys;
+        omega = cfg.omega(kk{1});
+    else
+        omega = cfg.omega;
+    end
+    widesrc = -1j * omega * mu0_mm * widesrc;
+end
+
+function rowvec = traceline(p1, p2, cfg)
+% trace one line segment through the tet mesh and accumulate
+% (bary_in + bary_out)/2 * dl per tet onto the per-node line integral.
+
+nn = size(cfg.node, 1);
+rowvec = zeros(1, nn);
+
+p1 = p1(:)';
+p2 = p2(:)';
+seglen = norm(p2 - p1);
+if seglen < 1e-12
+    return
+end
+dirvec = (p2 - p1) / seglen;
+
+[estart, barystart] = tsearchn(cfg.node(:, 1:3), cfg.elem(:, 1:4), p1);
+if isnan(estart)
+    return
+end
+
+face_local = [1 2 3; 1 2 4; 1 3 4; 2 3 4];
+
+e = estart;
+pcur = p1;
+barycur = barystart(:)';
+lrem = seglen;
+
+maxiter = 100 * size(cfg.elem, 1);
+iter = 0;
+while lrem > 1e-12 && e > 0 && iter < maxiter
+    iter = iter + 1;
+    elemnodes = cfg.elem(e, 1:4);
+    face_global = elemnodes(face_local);
+    [tt, uu, vv] = raytrace(pcur, dirvec, cfg.node(:, 1:3), face_global);
+    valid = (tt > 1e-10) & ~isinf(tt) & (uu >= -1e-10) & (vv >= -1e-10) & (uu + vv <= 1.0 + 1e-10);
+    validid = find(valid);
+    if isempty(validid)
+        break
+    end
+    [tmin, kk] = min(tt(validid));
+    flocal = validid(kk);
+
+    if tmin >= lrem - 1e-12
+        % segment ends inside this tet
+        pend = pcur + lrem * dirvec;
+        verts = cfg.node(elemnodes, 1:3)';
+        baryend = ([verts; ones(1, 4)] \ [pend(:); 1])';
+        contrib = (barycur + baryend) * 0.5 * lrem;
+        rowvec(elemnodes) = rowvec(elemnodes) + contrib;
+        break
+    end
+
+    u_e = uu(flocal);
+    v_e = vv(flocal);
+    fnodes = face_local(flocal, :);
+    baryexit = zeros(1, 4);
+    baryexit(fnodes(1)) = 1 - u_e - v_e;
+    baryexit(fnodes(2)) = u_e;
+    baryexit(fnodes(3)) = v_e;
+
+    contrib = (barycur + baryexit) * 0.5 * tmin;
+    rowvec(elemnodes) = rowvec(elemnodes) + contrib;
+
+    enext = cfg.facenb(e, flocal);
+    pcur = pcur + tmin * dirvec;
+    barycur = baryexit;
+    lrem = lrem - tmin;
+    e = enext;
 end

@@ -55,7 +55,8 @@ end
 if (~isfield(cfg, 'srcpos'))
     error('cfg.srcpos field is missing');
 end
-if (~isfield(cfg, 'srcdir'))
+src_is_line = (size(cfg.srcpos, 2) >= 6);
+if (~isfield(cfg, 'srcdir') && ~src_is_line)
     error('cfg.srcdir field is missing');
 end
 if (isfield(cfg, 'prop') && isfield(cfg, 'param') && ...
@@ -65,31 +66,73 @@ if (isfield(cfg, 'prop') && isfield(cfg, 'param') && ...
         cfg.prop = rbupdateprop(cfg);
     end
 end
-% compute R_eff - effective reflection coeff, and musp0 - background mus'
-if (~isfield(cfg, 'reff') || isempty(cfg.reff))
-    bkprop = rbgetbulk(cfg);
-    if (isa(bkprop, 'containers.Map'))
-        cfg.reff = containers.Map();
-        cfg.musp0 = containers.Map();
-        for waveid = bkprop.keys
-            wv = waveid{1};
-            prop = bkprop(wv);
-            cfg.reff(wv) = rbgetreff(prop(4), 1);
-            cfg.musp0(wv) = prop(2) * (1 - prop(3));
+
+ishelmholtz = isfield(cfg, 'bulk') && (isfield(cfg.bulk, 'epsilon') || isfield(cfg.bulk, 'sigma'));
+
+% face-adjacency table: 4 face-neighbors per tet (0 = boundary face).
+% used by line-source tracing for both DOT and MWT.
+if (~isfield(cfg, 'facenb') || isempty(cfg.facenb))
+    cfg.facenb = faceneighbors(cfg.elem(:, 1:4));
+end
+
+if (~ishelmholtz)
+    % compute R_eff - effective reflection coeff, and musp0 - background mus'
+    if (~isfield(cfg, 'reff') || isempty(cfg.reff))
+        bkprop = rbgetbulk(cfg);
+        if (isa(bkprop, 'containers.Map'))
+            cfg.reff = containers.Map();
+            cfg.musp0 = containers.Map();
+            for waveid = bkprop.keys
+                wv = waveid{1};
+                prop = bkprop(wv);
+                cfg.reff(wv) = rbgetreff(prop(4), 1);
+                cfg.musp0(wv) = prop(2) * (1 - prop(3));
+            end
+        else
+            cfg.reff = rbgetreff(bkprop(4), 1);
+            cfg.musp0 = bkprop(2) * (1 - bkprop(3));
         end
-    else
-        cfg.reff = rbgetreff(bkprop(4), 1);
-        cfg.musp0 = bkprop(2) * (1 - bkprop(3));
+    end
+else
+    % MWT: precompute Bayliss-Turkel RBC geometry on cfg.face
+    if (~isfield(cfg, 'facecenter') || isempty(cfg.facecenter))
+        cfg.facecenter = (cfg.node(cfg.face(:, 1), 1:3) + ...
+                          cfg.node(cfg.face(:, 2), 1:3) + ...
+                          cfg.node(cfg.face(:, 3), 1:3)) / 3;
+    end
+    if (~isfield(cfg, 'facenormal') || isempty(cfg.facenormal))
+        ab = cfg.node(cfg.face(:, 2), 1:3) - cfg.node(cfg.face(:, 1), 1:3);
+        ac = cfg.node(cfg.face(:, 3), 1:3) - cfg.node(cfg.face(:, 1), 1:3);
+        nrm = cross(ab, ac, 2);
+        nlen = sqrt(sum(nrm .* nrm, 2));
+        cfg.facenormal = nrm ./ repmat(nlen, 1, 3);
+    end
+    if (~isfield(cfg, 'rbcorigin') || isempty(cfg.rbcorigin))
+        if (isfield(cfg, 'srcpos') && isfield(cfg, 'detpos'))
+            optodes = [cfg.srcpos(:, 1:3); cfg.detpos(:, 1:3)];
+            if (size(cfg.srcpos, 2) >= 6)
+                optodes = [optodes; cfg.srcpos(:, 4:6)];
+            end
+            if (size(cfg.detpos, 2) >= 6)
+                optodes = [optodes; cfg.detpos(:, 4:6)];
+            end
+            cfg.rbcorigin = mean(optodes, 1);
+        else
+            cfg.rbcorigin = mean(cfg.node(:, 1:3), 1);
+        end
+    end
+    if (~isfield(cfg, 'facer') || isempty(cfg.facer))
+        rvec = cfg.facecenter - repmat(cfg.rbcorigin, size(cfg.facecenter, 1), 1);
+        cfg.facer = sqrt(sum(rvec .* rvec, 2));
     end
 end
-if (((isfield(cfg, 'srctype') && ~ismember(cfg.srctype, {'pencil', 'isotropic'})) || isfield(cfg, 'widesrcid')) && ~isfield(cfg, 'widesrc'))
+det_is_line = isfield(cfg, 'detpos') && (size(cfg.detpos, 2) >= 6);
+if (((isfield(cfg, 'srctype') && ~ismember(cfg.srctype, {'pencil', 'isotropic'})) || isfield(cfg, 'widesrcid') || src_is_line) && ~isfield(cfg, 'widesrc'))
     cfg.srcpos0 = cfg.srcpos;
-    %     cfg.srcpos=rbsrc2bc(cfg);
     cfg = rbsrc2bc(cfg);
 end
-if (((isfield(cfg, 'dettype') && ~ismember(cfg.dettype, {'pencil', 'isotropic'})) || isfield(cfg, 'widedetid')) && ~isfield(cfg, 'widedet'))
+if (((isfield(cfg, 'dettype') && ~ismember(cfg.dettype, {'pencil', 'isotropic'})) || isfield(cfg, 'widedetid') || det_is_line) && ~isfield(cfg, 'widedet'))
     cfg.detpos0 = cfg.detpos;
-    %     cfg.detpos=rbsrc2bc(cfg,1);
     cfg = rbsrc2bc(cfg, 1);
 end
 if (~isfield(cfg, 'cols') || isempty(cfg.cols))

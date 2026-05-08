@@ -11,6 +11,13 @@ function [Amat, deldotdel] = rbfemlhs(cfg, deldotdel, wavelength, mode)
 % or cfg.bulk.sigma is present (defining the bulk medium for the
 % first-order Bayliss-Turkel radiation boundary condition).
 %
+% the optional 4th input "mode" selects the operator returned:
+%     mode = 1 (default) : full FD/CW LHS (uses cfg.omega)
+%     mode = 2           : CW spatial operator (omega=0)
+%     mode = 3           : pure consistent mass matrix M (no stiffness, no
+%                          absorption, no BC; used by the time-domain
+%                          Crank-Nicolson solver in rbruntd)
+%
 % author: Qianqian Fang (q.fang <at> neu.edu)
 %
 % input:
@@ -41,6 +48,12 @@ R_C0 = (1 ./ 299792458000.);
 % bulk medium for the radiation boundary condition.
 ishelmholtz = isfield(cfg, 'bulk') && (isfield(cfg.bulk, 'epsilon') || isfield(cfg.bulk, 'sigma'));
 
+% pure mass-matrix mode: skip property extraction and BC; used by rbruntd.
+ismassonly = exist('mode', 'var') && ~isempty(mode) && (mode == 3);
+if (ismassonly)
+    ishelmholtz = false;
+end
+
 % cfg.prop is updated from cfg.param and contains the updated material props.
 % DOT: cfg.prop columns are [mua mus g n] (1/mm, 1/mm, scalar, scalar)
 % MWT: cfg.prop columns are [eps_r sigma mu0 n] (scalar, S/mm, H/mm, scalar)
@@ -49,13 +62,13 @@ ishelmholtz = isfield(cfg, 'bulk') && (isfield(cfg.bulk, 'epsilon') || isfield(c
 % prop, where the first row is label 0, and total length is Nseg+1
 
 prop = cfg.prop;
-if (~ishelmholtz)
+if (~ishelmholtz && ~ismassonly)
     cfgreff = cfg.reff;
 end
 if exist('mode', 'var')
     if mode == 1
         omega = cfg.omega;
-    elseif mode == 2
+    elseif mode == 2 || mode == 3
         omega = 0;
     end
 else
@@ -74,7 +87,7 @@ if (isa(cfg.prop, 'containers.Map')) % if multiple wavelengths, take current
         wavelength = sprintf('%g', wavelength);
     end
     prop = cfg.prop(wavelength);
-    if (~ishelmholtz)
+    if (~ishelmholtz && ~ismassonly)
         cfgreff = cfg.reff(wavelength);
     end
     if (isa(omega, 'containers.Map'))
@@ -89,7 +102,13 @@ if (nargin >= 2 && numel(deldotdel) > 1)
     % block, (avol, breal, bimag) define the per-element or per-node
     % coefficients in:  A_e = avol*<grad phi_i, grad phi_j>_e
     %                       + (breal + 1j*bimag)*<phi_i, phi_j>_e
-    if (ishelmholtz)
+    if (ismassonly)
+        % pure mass matrix: kill the stiffness term, set mass weight to 1,
+        % skip imaginary part and the boundary condition.
+        avol = zeros(ne, 1);
+        breal = ones(ne, 1);
+        bimag = zeros(ne, 1);
+    elseif (ishelmholtz)
         eps0_mm = 8.854187817e-15;  % F/mm
         if (size(prop, 1) == nn || size(prop, 1) == ne)
             eps_r = prop(:, 1);
@@ -166,7 +185,9 @@ if (nargin >= 2 && numel(deldotdel) > 1)
 
     % boundary condition: Robin (DOT) or first-order Bayliss-Turkel (MWT)
     edgebc = sort(meshedge(cfg.face), 2);
-    if (ishelmholtz)
+    if (ismassonly)
+        Adiagbc = zeros(size(cfg.area, 1), 1);
+    elseif (ishelmholtz)
         bk = rbgetbulk(cfg);
         if (isa(bk, 'containers.Map'))
             bk = bk(wavelength);

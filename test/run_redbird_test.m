@@ -34,7 +34,7 @@ function run_redbird_test(tests)
 %
 
 if (nargin == 0)
-    tests = {'util', 'jac', 'prop', 'mesh', 'forward', 'solver', 'recon', 'mwt'};
+    tests = {'util', 'jac', 'prop', 'mesh', 'forward', 'solver', 'recon', 'mwt', 'td'};
 end
 
 global RB_FAIL RB_TOTAL
@@ -89,6 +89,13 @@ end
 if (ismember('mwt', tests))
     fprintf(1, '%s\nMicrowave tomography (Helmholtz + RBC)\n%s\n', bar, bar);
     test_mwt();
+end
+
+if (ismember('td', tests) && exist('meshabox', 'file'))
+    fprintf(1, '%s\nTime-domain DOT (Crank-Nicolson)\n%s\n', bar, bar);
+    test_td();
+elseif ismember('td', tests)
+    fprintf(2, '[skip] ''td'' requires iso2mesh\n');
 end
 
 fprintf(1, '%s\n', bar);
@@ -784,3 +791,126 @@ k_lo = sqrt(omega_lo^2 * mu0_mm * eps0_mm);   % lossless vacuum
 k_hi = sqrt(omega_hi^2 * mu0_mm * eps0_mm);
 test_redbird('MWT k(omega): Re(k) scales linearly with omega in lossless', ...
              @(r) abs(r - 10) < 1e-9, true, real(k_hi) / real(k_lo));
+
+% =========================================================================
+function test_td()
+
+% ---- rbfemlhs mode=3 returns pure consistent mass matrix ----
+% on a single tetrahedron with known volume, M_ii = V/10, M_ij = V/20.
+cfgU = struct;
+cfgU.node = [0 0 0; 1 0 0; 0 1 0; 0 0 1];
+cfgU.elem = [1 2 3 4];
+cfgU.face = [2 3 4; 1 3 4; 1 2 4; 1 2 3];
+cfgU.area = elemvolume(cfgU.node, cfgU.face);
+cfgU.evol = elemvolume(cfgU.node, cfgU.elem);
+cfgU.deldotdel = rbdeldotdel(cfgU);
+cfgU.prop = [0 0 1 1; 0.01 1 0 1.37];
+cfgU.seg = 1;
+M = rbfemlhs(cfgU, cfgU.deldotdel, '_', 3);
+test_redbird('rbfemlhs mode=3: M(1,1) = V_e/10', ...
+             @(x) abs(x - cfgU.evol / 10) < 1e-15, true, full(M(1, 1)));
+test_redbird('rbfemlhs mode=3: M(1,2) = V_e/20', ...
+             @(x) abs(x - cfgU.evol / 20) < 1e-15, true, full(M(1, 2)));
+test_redbird('rbfemlhs mode=3: M is symmetric', ...
+             @(M) max(max(abs(M - M.'))) < 1e-15, true, full(M));
+test_redbird('rbfemlhs mode=3: row-sum = V_e/4', ...
+             @(s) max(abs(s - cfgU.evol / 4)) < 1e-15, true, full(sum(M, 2)));
+
+% ---- TD forward smoke: default impulse source ----
+cfg = struct;
+[cfg.node, cfg.face, cfg.elem] = meshabox([0 0 0], [40 40 40], 8);
+cfg.seg = ones(size(cfg.elem, 1), 1);
+cfg.srcpos = [20 20 0];
+cfg.srcdir = [0 0 1];
+cfg.detpos = [20 20 40];
+cfg.detdir = [0 0 -1];
+cfg.prop = [0 0 1 1; 0.01 1 0 1.37];
+cfg.omega = 0;
+cfg.tstart = 0;
+cfg.tstep = 50e-12;
+cfg.tend = 2e-9;
+cfg = rbmeshprep(cfg);
+[detphi_td, ~, Amat_td, rhs_td] = rbrunforward(cfg);
+
+test_redbird('TD detphi has 3D shape Ndet x Nsrc x Nt', ...
+             @() size(detphi_td), [1 1 41]);
+test_redbird('TD detphi is finite', ...
+             @(x) all(isfinite(x(:))), true, detphi_td);
+% past the peak, the diffusing tail is monotonically non-negative; early-time
+% CN ringing on a coarse mesh with impulse IC is a known numerical artifact
+% (use a smooth srctemporal or finer mesh in production).
+[~, peak_lin] = max(abs(detphi_td(:)));
+[~, ~, peak_t_idx] = ind2sub(size(detphi_td), peak_lin);
+test_redbird('TD detphi tail (after peak) is non-negative', ...
+             @(x) all(x >= 0), true, ...
+             squeeze(detphi_td(:, :, peak_t_idx:end)));
+test_redbird('TD detphi has a non-trivial peak', ...
+             @(x) max(abs(x(:))) > 0, true, detphi_td);
+
+% peak should occur somewhere in the interior, not at t=tstart and not at t=tend
+[~, peak_idx] = max(abs(detphi_td(:)));
+[~, ~, peak_t] = ind2sub(size(detphi_td), peak_idx);
+test_redbird('TD detphi peak is interior (not at t=tstart)', ...
+             @(t) t > 1, true, peak_t);
+test_redbird('TD detphi peak is interior (not at t=tend)', ...
+             @(t) t < size(detphi_td, 3), true, peak_t);
+
+% ---- TD forward with custom temporal modulation ----
+cfg2 = cfg;
+cfg2 = rmfield(cfg2, {'reff', 'musp0', 'deldotdel', 'rows', 'cols', 'idxcount', 'idxsum', 'facenb'});
+cfg2 = rbmeshprep(cfg2);
+nt = length(cfg2.tstart:cfg2.tstep:cfg2.tend);
+[detphi_const, ~] = rbrunforward(cfg2, 'srctemporal', ones(nt, 1));
+test_redbird('TD with constant src has 3D shape', ...
+             @() size(detphi_const), [1 1 nt]);
+test_redbird('TD with constant src is finite', ...
+             @(x) all(isfinite(x(:))), true, detphi_const);
+% with constant source from t=0 starting from phi=0, detphi grows monotonically
+% over time (until eventually approaching steady state)
+test_redbird('TD with constant src grows over time', ...
+             @(d) d(end) > d(2), true, detphi_const);
+
+% ---- conflict: cfg.omega > 0 + TD should error in rbmeshprep ----
+cfgE = cfg;
+cfgE = rmfield(cfgE, {'reff', 'musp0', 'deldotdel', 'rows', 'cols', 'idxcount', 'idxsum', 'facenb'});
+cfgE.omega = 2 * pi * 1e8;
+test_redbird('TD + omega>0 errors in rbmeshprep', ...
+             @() rbmeshprep(cfgE), 'error');
+
+% ---- conflict: MWT bulk + TD should error in rbmeshprep ----
+cfgM = cfg;
+cfgM = rmfield(cfgM, {'reff', 'musp0', 'deldotdel', 'rows', 'cols', 'idxcount', 'idxsum', 'facenb'});
+cfgM.bulk = struct('epsilon', 4, 'sigma', 0, 'n', 2);
+test_redbird('TD + MWT bulk.epsilon errors in rbmeshprep', ...
+             @() rbmeshprep(cfgM), 'error');
+
+% ---- integration invariant: int_0^T detphi_TD(t) dt ≈ detphi_CW for impulse IC ----
+% the impulse response integrated over time should equal the CW steady-state
+% response (Laplace-transform-at-zero identity for the diffusion equation).
+% use a longer time window to capture the tail.
+cfgI = struct;
+[cfgI.node, cfgI.face, cfgI.elem] = meshabox([0 0 0], [40 40 40], 8);
+cfgI.seg = ones(size(cfgI.elem, 1), 1);
+cfgI.srcpos = [20 20 0];
+cfgI.srcdir = [0 0 1];
+cfgI.detpos = [20 20 40];
+cfgI.detdir = [0 0 -1];
+cfgI.prop = [0 0 1 1; 0.01 1 0 1.37];
+cfgI.omega = 0;
+cfgI.tstart = 0;
+cfgI.tstep = 50e-12;
+cfgI.tend = 1e-8;        % 10 ns is enough for diffusion tail to subside
+cfgI = rbmeshprep(cfgI);
+detphi_imp = rbrunforward(cfgI);
+% trapezoidal integral over time
+integ = squeeze(sum(detphi_imp, 3) - 0.5 * (detphi_imp(:, :, 1) + detphi_imp(:, :, end))) * cfgI.tstep;
+
+% CW reference
+cfgC = rmfield(cfgI, {'tstart', 'tstep', 'tend', 'reff', 'musp0', 'deldotdel', 'rows', 'cols', 'idxcount', 'idxsum', 'facenb'});
+cfgC = rbmeshprep(cfgC);
+detphi_cw = rbrunforward(cfgC);
+
+% expect integral and CW solution to agree to within a few percent
+relerr = abs(integ - detphi_cw) / abs(detphi_cw);
+test_redbird('TD integration invariant: int_0^T phi_TD(t) dt ~ phi_CW', ...
+             @(r) r < 0.05, true, relerr);

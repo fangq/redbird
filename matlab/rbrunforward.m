@@ -138,6 +138,16 @@ if (isfield(cfg, 'nphoton'))
     return
 end
 
+% time-domain DOT (Crank-Nicolson) is engaged when cfg.tstart, cfg.tstep,
+% and cfg.tend are all defined; rbruntd handles the time loop.
+if (isfield(cfg, 'tstart') && ~isempty(cfg.tstart) && ...
+    isfield(cfg, 'tstep') && ~isempty(cfg.tstep) && ...
+    isfield(cfg, 'tend') && ~isempty(cfg.tend))
+    [detval, phi, Amat, rhs] = rbruntd(cfg, varargin{:});
+    sflag = 0;
+    return
+end
+
 rfcw = jsonopt('rfcw', 1, opt);
 
 if (~isfield(cfg, 'deldotdel'))

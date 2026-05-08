@@ -149,5 +149,25 @@ end
 if (~isfield(cfg, 'omega') || isempty(cfg.omega))
     cfg.omega = 0;
 end
+
+% time-domain DOT (Crank-Nicolson) is engaged when cfg.tstart, cfg.tstep,
+% and cfg.tend are all defined. Validate and reject mixed configurations.
+istd = isfield(cfg, 'tstart') && ~isempty(cfg.tstart) && ...
+       isfield(cfg, 'tstep') && ~isempty(cfg.tstep) && ...
+       isfield(cfg, 'tend') && ~isempty(cfg.tend);
+if (istd)
+    if (cfg.tend <= cfg.tstart)
+        error('cfg.tend must be greater than cfg.tstart for time-domain DOT');
+    end
+    if (cfg.tstep <= 0)
+        error('cfg.tstep must be positive for time-domain DOT');
+    end
+    if (any(cfg.omega(:) ~= 0))
+        error('time-domain DOT (cfg.tstart/tstep/tend) cannot be used with frequency-domain modulation (cfg.omega>0); pick one');
+    end
+    if (ishelmholtz)
+        error('time-domain Crank-Nicolson is only valid for the parabolic diffusion equation; remove cfg.bulk.epsilon/sigma to use TD');
+    end
+end
 newcfg = cfg;
 sd = rbsdmap(cfg);

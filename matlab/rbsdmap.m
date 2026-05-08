@@ -98,15 +98,18 @@ end
 
 src = 1:srcnum;
 widesrc = [1:widesrcnum] + srcnum;
-goodsrc = sort(setdiff(1:srcnum, badsrc));
-goodwfsrc = sort(setdiff(1:widesrcnum, badwfsrc));
+% normalize to 1xN row vectors: setdiff returns a 0x1 empty when the input
+% is empty in some Octave versions (>=10), which breaks horizontal
+% concatenation with non-empty row vectors below.
+goodsrc = reshape(sort(setdiff(1:srcnum, badsrc)), 1, []);
+goodwfsrc = reshape(sort(setdiff(1:widesrcnum, badwfsrc)), 1, []);
 if ~isempty(goodwfsrc)
     goodwfsrc = goodwfsrc + srcnum;
 end
 det = 1:detnum;
 widedet = [1:widedetnum] + detnum;
-gooddet = sort(setdiff(1:detnum, baddet));
-goodwfdet = sort(setdiff(1:widedetnum, badwfdet));
+gooddet = reshape(sort(setdiff(1:detnum, baddet)), 1, []);
+goodwfdet = reshape(sort(setdiff(1:widedetnum, badwfdet)), 1, []);
 if ~isempty(goodwfdet)
     goodwfdet = goodwfdet + detnum;
 end

@@ -668,12 +668,16 @@ test_redbird('rbmeshprep MWT facenormal unit length', ...
 test_redbird('rbmeshprep MWT facer is positive', ...
              @(x) all(x > 0), true, cfgF.facer);
 
-% ---- line source via 6-column srcpos ----
+% ---- line source via cfg.srctype='line' + cfg.srcparam1 ----
 cfgL = struct;
 [cfgL.node, cfgL.face, cfgL.elem] = meshabox([0 0 0], [40 40 40], 8);
 cfgL.seg = ones(size(cfgL.elem, 1), 1);
-cfgL.srcpos = [20 20 0 20 20 40];   % single line through the box
-cfgL.detpos = [10 10 0 10 10 40];
+cfgL.srctype = 'line';
+cfgL.srcpos = [20 20 0];
+cfgL.srcparam1 = [0 0 40];
+cfgL.dettype = 'line';
+cfgL.detpos = [10 10 0];
+cfgL.detparam1 = [0 0 40];
 cfgL.bulk = struct('epsilon', 1, 'sigma', 0, 'n', 1);
 cfgL.prop = containers.Map({'5e8'}, {[1 0 mu0_mm 1; 1 0 mu0_mm 1]});
 cfgL.omega = 2 * pi * 5e8;
@@ -703,8 +707,12 @@ test_redbird('MWT forward: detphi finite', ...
 cfgD = struct;
 [cfgD.node, cfgD.face, cfgD.elem] = meshabox([0 0 0], [40 40 40], 8);
 cfgD.seg = ones(size(cfgD.elem, 1), 1);
-cfgD.srcpos = [20 20 0 20 20 40];
-cfgD.detpos = [10 10 35 30 30 35];
+cfgD.srctype = 'line';
+cfgD.srcpos = [20 20 0];
+cfgD.srcparam1 = [0 0 40];
+cfgD.dettype = 'line';
+cfgD.detpos = [10 10 35];
+cfgD.detparam1 = [20 20 0];
 cfgD.prop = [0 0 1 1; 0.01 1 0 1.37];
 cfgD.omega = 0;
 cfgD = rbmeshprep(cfgD);
@@ -740,10 +748,14 @@ test_redbird('MWT k(lossy): Im(k) negative for sigma>0', ...
 cfgR = struct;
 [cfgR.node, cfgR.face, cfgR.elem] = meshabox([0 0 0], [40 40 40], 8);
 cfgR.seg = ones(size(cfgR.elem, 1), 1);
-cfgR.srcpos = [10 20  5 10 20 35
-               30 20  5 30 20 35];
-cfgR.detpos = [10 20  5 10 20 35
-               30 20  5 30 20 35];
+cfgR.srctype = 'line';
+cfgR.srcpos = [10 20 5
+               30 20 5];
+cfgR.srcparam1 = [0 0 30];
+cfgR.dettype = 'line';
+cfgR.detpos = [10 20 5
+               30 20 5];
+cfgR.detparam1 = [0 0 30];
 cfgR.bulk = struct('epsilon', 4, 'sigma', 1e-4, 'n', 2);
 cfgR.prop = containers.Map({'5e8'}, {[1 0 mu0_mm 1; 4 1e-4 mu0_mm 2]});
 cfgR.omega = 2 * pi * 5e8;
@@ -759,8 +771,12 @@ test_redbird('MWT reciprocity: detphi(2->1) == detphi(1->2)', ...
 cfgLF = struct;
 [cfgLF.node, cfgLF.face, cfgLF.elem] = meshabox([0 0 0], [40 40 40], 8);
 cfgLF.seg = ones(size(cfgLF.elem, 1), 1);
-cfgLF.srcpos = [10 20 5 10 20 35];
-cfgLF.detpos = [30 20 5 30 20 35];
+cfgLF.srctype = 'line';
+cfgLF.srcpos = [10 20 5];
+cfgLF.srcparam1 = [0 0 30];
+cfgLF.dettype = 'line';
+cfgLF.detpos = [30 20 5];
+cfgLF.detparam1 = [0 0 30];
 cfgLF.omega = 2 * pi * 5e8;
 % lossless reference
 cfgLF.bulk = struct('epsilon', 4, 'sigma', 0, 'n', 2);
@@ -772,8 +788,12 @@ detphi_lossless = rbrunforward(cfgLF);
 cfgLY = struct;
 [cfgLY.node, cfgLY.face, cfgLY.elem] = meshabox([0 0 0], [40 40 40], 8);
 cfgLY.seg = ones(size(cfgLY.elem, 1), 1);
-cfgLY.srcpos = [10 20 5 10 20 35];
-cfgLY.detpos = [30 20 5 30 20 35];
+cfgLY.srctype = 'line';
+cfgLY.srcpos = [10 20 5];
+cfgLY.srcparam1 = [0 0 30];
+cfgLY.dettype = 'line';
+cfgLY.detpos = [30 20 5];
+cfgLY.detparam1 = [0 0 30];
 cfgLY.omega = 2 * pi * 5e8;
 cfgLY.bulk = struct('epsilon', 4, 'sigma', 1e-3, 'n', 2);
 cfgLY.prop = containers.Map({'5e8'}, {[1 0 mu0_mm 1; 4 1e-3 mu0_mm 2]});

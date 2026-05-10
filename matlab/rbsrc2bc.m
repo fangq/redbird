@@ -30,20 +30,29 @@ if (nargin < 2)
     isdet = 0;
 end
 
-% line-source path (works for both DOT and MWT): when cfg.srcpos has 6 columns,
-% columns 1-3 are the start point and columns 4-6 are the end point of a line
-% segment source. Each line is traced through the tet mesh and contributes a
-% sparse RHS column built from per-tet line integrals of the linear basis.
-% the same applies to cfg.detpos when isdet == 1.
-if (~isdet && isfield(cfg, 'srcpos') && size(cfg.srcpos, 2) >= 6)
+% line-source path (works for both DOT and MWT): triggered by
+% cfg.srctype=='line' (or cfg.dettype=='line' for detectors). cfg.srcpos(:,1:3)
+% is the line start; cfg.srcpos(:,1:3)+cfg.srcparam1(1:3) is the end. Each
+% line is traced through the tet mesh and contributes a sparse RHS column
+% built from per-tet line integrals of the linear basis. No 1/musp sinking
+% is applied (unlike pencil sources).
+if (~isdet && isfield(cfg, 'srctype') && strcmp(cfg.srctype, 'line') && isfield(cfg, 'srcpos') && ~isempty(cfg.srcpos))
+    if (~isfield(cfg, 'srcparam1') || numel(cfg.srcparam1) < 3)
+        error('cfg.srctype=''line'' requires cfg.srcparam1(1:3) (line endpoint offset)');
+    end
     cfg.srcpos0 = cfg.srcpos;
-    cfg.widesrc = lineseg2rhs(cfg.srcpos, cfg);
+    linesegs = [cfg.srcpos(:, 1:3), cfg.srcpos(:, 1:3) + repmat(cfg.srcparam1(1:3), size(cfg.srcpos, 1), 1)];
+    cfg.widesrc = lineseg2rhs(linesegs, cfg);
     cfg.srcpos = zeros(0, 3);
     return
 end
-if (isdet && isfield(cfg, 'detpos') && size(cfg.detpos, 2) >= 6)
+if (isdet && isfield(cfg, 'dettype') && strcmp(cfg.dettype, 'line') && isfield(cfg, 'detpos') && ~isempty(cfg.detpos))
+    if (~isfield(cfg, 'detparam1') || numel(cfg.detparam1) < 3)
+        error('cfg.dettype=''line'' requires cfg.detparam1(1:3) (line endpoint offset)');
+    end
     cfg.detpos0 = cfg.detpos;
-    cfg.widedet = lineseg2rhs(cfg.detpos, cfg);
+    linesegs = [cfg.detpos(:, 1:3), cfg.detpos(:, 1:3) + repmat(cfg.detparam1(1:3), size(cfg.detpos, 1), 1)];
+    cfg.widedet = lineseg2rhs(linesegs, cfg);
     cfg.detpos = zeros(0, 3);
     return
 end

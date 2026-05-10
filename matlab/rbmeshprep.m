@@ -55,7 +55,7 @@ end
 if (~isfield(cfg, 'srcpos'))
     error('cfg.srcpos field is missing');
 end
-src_is_line = (size(cfg.srcpos, 2) >= 6);
+src_is_line = isfield(cfg, 'srctype') && strcmp(cfg.srctype, 'line');
 if (~isfield(cfg, 'srcdir') && ~src_is_line)
     error('cfg.srcdir field is missing');
 end
@@ -110,11 +110,11 @@ else
     if (~isfield(cfg, 'rbcorigin') || isempty(cfg.rbcorigin))
         if (isfield(cfg, 'srcpos') && isfield(cfg, 'detpos'))
             optodes = [cfg.srcpos(:, 1:3); cfg.detpos(:, 1:3)];
-            if (size(cfg.srcpos, 2) >= 6)
-                optodes = [optodes; cfg.srcpos(:, 4:6)];
+            if (isfield(cfg, 'srctype') && strcmp(cfg.srctype, 'line') && isfield(cfg, 'srcparam1') && numel(cfg.srcparam1) >= 3)
+                optodes = [optodes; cfg.srcpos(:, 1:3) + repmat(cfg.srcparam1(1:3), size(cfg.srcpos, 1), 1)];
             end
-            if (size(cfg.detpos, 2) >= 6)
-                optodes = [optodes; cfg.detpos(:, 4:6)];
+            if (isfield(cfg, 'dettype') && strcmp(cfg.dettype, 'line') && isfield(cfg, 'detparam1') && numel(cfg.detparam1) >= 3)
+                optodes = [optodes; cfg.detpos(:, 1:3) + repmat(cfg.detparam1(1:3), size(cfg.detpos, 1), 1)];
             end
             cfg.rbcorigin = mean(optodes, 1);
         else
@@ -126,7 +126,7 @@ else
         cfg.facer = sqrt(sum(rvec .* rvec, 2));
     end
 end
-det_is_line = isfield(cfg, 'detpos') && (size(cfg.detpos, 2) >= 6);
+det_is_line = isfield(cfg, 'detpos') && isfield(cfg, 'dettype') && strcmp(cfg.dettype, 'line');
 if (((isfield(cfg, 'srctype') && ~ismember(cfg.srctype, {'pencil', 'isotropic'})) || isfield(cfg, 'widesrcid') || src_is_line) && ~isfield(cfg, 'widesrc'))
     cfg.srcpos0 = cfg.srcpos;
     cfg = rbsrc2bc(cfg);

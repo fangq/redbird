@@ -57,6 +57,31 @@ if (isdet && isfield(cfg, 'dettype') && strcmp(cfg.dettype, 'line') && isfield(c
     return
 end
 
+% ray-source path: cfg.srctype=='ray' models a collimated beam as a line of
+% isotropic sources with weight density mu_s' * exp(-mu_s' * l), normalized so
+% the total integral over the (untruncated) ray equals 1 and the mean depth is
+% 1/mu_s' = l_tr (Haskell et al. 1994, eq 2.4.5). Truncated at amplitude
+% threshold (default 1e-3) along cfg.srcdir from cfg.srcpos. cfg.srcdir is
+% required (unlike 'line' which uses srcparam1). Same applies for 'ray' dets.
+if (~isdet && isfield(cfg, 'srctype') && strcmp(cfg.srctype, 'ray') && isfield(cfg, 'srcpos') && ~isempty(cfg.srcpos))
+    if (~isfield(cfg, 'srcdir') || isempty(cfg.srcdir))
+        error('cfg.srctype=''ray'' requires cfg.srcdir');
+    end
+    cfg.srcpos0 = cfg.srcpos;
+    cfg.widesrc = rayseg2rhs(cfg.srcpos, cfg.srcdir, cfg);
+    cfg.srcpos = zeros(0, 3);
+    return
+end
+if (isdet && isfield(cfg, 'dettype') && strcmp(cfg.dettype, 'ray') && isfield(cfg, 'detpos') && ~isempty(cfg.detpos))
+    if (~isfield(cfg, 'detdir') || isempty(cfg.detdir))
+        error('cfg.dettype=''ray'' requires cfg.detdir');
+    end
+    cfg.detpos0 = cfg.detpos;
+    cfg.widedet = rayseg2rhs(cfg.detpos, cfg.detdir, cfg);
+    cfg.detpos = zeros(0, 3);
+    return
+end
+
 if (~isdet)
     if ((~isfield(cfg, 'srctype') && ~isfield(cfg, 'widesrcid')) || (isfield(cfg, 'srctype') && (strcmp(cfg.srctype, 'pencil') || strcmp(cfg.srctype, 'isotropic'))))
         return
@@ -414,7 +439,241 @@ while lrem > 1e-12 && e > 0 && iter < maxiter
 
     enext = cfg.facenb(e, flocal);
     pcur = pcur + tmin * dirvec;
-    barycur = baryexit;
     lrem = lrem - tmin;
     e = enext;
+    if e > 0
+        % re-express bary in the new tet's local node order (the 3 shared face
+        % nodes typically occupy different local positions in e vs enext)
+        elemnodes_next = cfg.elem(e, 1:4);
+        verts_next = cfg.node(elemnodes_next, 1:3)';
+        barycur = ([verts_next; ones(1, 4)] \ [pcur(:); 1])';
+    else
+        barycur = baryexit;
+    end
+end
+
+function widesrc = rayseg2rhs(positions, dirs, cfg)
+% build the RHS for each ray source/detector. Each ray starts at positions(s,:)
+% and propagates along dirs(s,:) (or dirs broadcast), with weight density
+% mu_s' * exp(-mu_tr * l) along the beam (Haskell et al. 1994, eq 2.4.5).
+% mu_tr = mu_a + mu_s' is the transport-attenuation coefficient (the photon
+% is depleted by both scattering and absorption en route to the first-scatter
+% point); mu_s' is the rate of scattering events per unit length. The total
+% integral over the (untruncated) ray is the transport albedo mu_s'/mu_tr.
+%
+% Geometric tet-walk is performed once per ray (wavelength-independent); the
+% per-tet records are then integrated using each wavelength's (mu_s', mu_tr)
+% pair. For multi-wavelength runs (cfg.musp0 a containers.Map), the cached
+% geometry can be reintegrated; this prototype outputs a single matrix using
+% the first wavelength's coefficients. For Helmholtz/MWT, widesrc is scaled by
+% -j*omega*mu0 to match the line-source convention.
+
+ns = size(positions, 1);
+nn = size(cfg.node, 1);
+
+threshold = 1e-3;
+if (isfield(cfg, 'raythreshold') && ~isempty(cfg.raythreshold))
+    threshold = cfg.raythreshold;
+end
+
+% bulk optical properties to compute (mu_s', mu_tr) per wavelength
+bkprop = rbgetbulk(cfg);
+if isa(bkprop, 'containers.Map')
+    keys = bkprop.keys;
+    musp_vals  = zeros(1, length(keys));
+    mutr_vals = zeros(1, length(keys));
+    for k = 1:length(keys)
+        bk = bkprop(keys{k});
+        musp_vals(k)  = bk(2) * (1 - bk(3));
+        mutr_vals(k) = bk(1) + musp_vals(k);
+    end
+    musp_default  = musp_vals(1);
+    mutr_default = mutr_vals(1);
+    mutr_min     = min(mutr_vals);
+else
+    musp_default  = bkprop(2) * (1 - bkprop(3));
+    mutr_default = bkprop(1) + musp_default;
+    mutr_min     = mutr_default;
+end
+
+if (isfield(cfg, 'raylen') && ~isempty(cfg.raylen))
+    L_max = cfg.raylen;
+else
+    L_max = -log(threshold) / mutr_min;
+end
+
+if size(dirs, 1) == 1
+    dirs = repmat(dirs, ns, 1);
+end
+dirnorms = sqrt(sum(dirs.^2, 2));
+dirs = dirs ./ repmat(dirnorms, 1, 3);
+
+widesrc = zeros(ns, nn);
+for s = 1:ns
+    geom = ray_trace_geom(positions(s, 1:3), dirs(s, :), L_max, cfg);
+    widesrc(s, :) = ray_integrate(geom, musp_default, mutr_default, cfg);
+end
+
+if isfield(cfg, 'srcweight') && numel(cfg.srcweight) == ns
+    widesrc = widesrc .* cfg.srcweight(:);
+end
+
+ishelmholtz = isfield(cfg, 'bulk') && (isfield(cfg.bulk, 'epsilon') || isfield(cfg.bulk, 'sigma'));
+if (ishelmholtz)
+    mu0_mm = 4 * pi * 1e-10;
+    if isa(cfg.omega, 'containers.Map')
+        kk = cfg.omega.keys;
+        omega = cfg.omega(kk{1});
+    else
+        omega = cfg.omega;
+    end
+    widesrc = -1j * omega * mu0_mm * widesrc;
+end
+
+function geom = ray_trace_geom(p0, dirvec, L_max, cfg)
+% walk the ray through tetrahedra up to length L_max; record per-tet info
+% (element id, entry/exit distances along the ray, entry/exit barycentric
+% coordinates). geometry is wavelength-independent and can be reused for
+% multi-wavelength integration.
+
+p0 = p0(:)';
+dirvec = dirvec(:)';
+
+% Tiny perpendicular nudge on p0 to break grid-aligned ray failures: when
+% dirvec is axis-aligned and p0 lies on a face shared by 4+ structured-mesh
+% tets, raytrace returns Inf for two faces and 0 for two faces of the
+% post-transition tet, leaving no valid forward exit and silently aborting
+% the trace after the 1st tet (mass loss ~30% for typical setups). The
+% nudge magnitude is ~1e-6 mm, far below any mesh resolution, so physics is
+% unchanged.
+abs_dir = abs(dirvec);
+[~, idx] = min(abs_dir);
+e_arb = zeros(1, 3);
+e_arb(idx) = 1;
+perp1 = cross(dirvec, e_arb);
+perp1 = perp1 / norm(perp1);
+perp2 = cross(dirvec, perp1);
+perp2 = perp2 / norm(perp2);
+p0 = p0 + 1e-6 * perp1 + 1.3e-6 * perp2;
+
+geom = struct('elemids', zeros(0, 1), 'zs', zeros(0, 2), ...
+              'barys_in', zeros(0, 4), 'barys_out', zeros(0, 4));
+
+[estart, barystart] = tsearchn(cfg.node(:, 1:3), cfg.elem(:, 1:4), p0);
+if isnan(estart)
+    return
+end
+
+face_local = [1 2 3; 1 2 4; 1 3 4; 2 3 4];
+
+e = estart;
+pcur = p0;
+barycur = barystart(:)';
+zcur = 0;
+lrem = L_max;
+
+elemids = [];
+zs = [];
+barys_in = [];
+barys_out = [];
+
+maxiter = 100 * size(cfg.elem, 1);
+iter = 0;
+while lrem > 1e-12 && e > 0 && iter < maxiter
+    iter = iter + 1;
+    elemnodes = cfg.elem(e, 1:4);
+    face_global = elemnodes(face_local);
+    [tt, uu, vv] = raytrace(pcur, dirvec, cfg.node(:, 1:3), face_global);
+    valid = (tt > 1e-10) & ~isinf(tt) & (uu >= -1e-10) & (vv >= -1e-10) & (uu + vv <= 1.0 + 1e-10);
+    validid = find(valid);
+    if isempty(validid)
+        break
+    end
+    [tmin, kk] = min(tt(validid));
+    flocal = validid(kk);
+
+    if tmin >= lrem - 1e-12
+        % ray ends inside this tet (truncated by L_max)
+        pend = pcur + lrem * dirvec;
+        verts = cfg.node(elemnodes, 1:3)';
+        baryend = ([verts; ones(1, 4)] \ [pend(:); 1])';
+        elemids = [elemids; e];
+        zs = [zs; zcur, zcur + lrem];
+        barys_in = [barys_in; barycur];
+        barys_out = [barys_out; baryend];
+        break
+    end
+
+    u_e = uu(flocal);
+    v_e = vv(flocal);
+    fnodes = face_local(flocal, :);
+    baryexit = zeros(1, 4);
+    baryexit(fnodes(1)) = 1 - u_e - v_e;
+    baryexit(fnodes(2)) = u_e;
+    baryexit(fnodes(3)) = v_e;
+
+    elemids = [elemids; e];
+    zs = [zs; zcur, zcur + tmin];
+    barys_in = [barys_in; barycur];
+    barys_out = [barys_out; baryexit];
+
+    enext = cfg.facenb(e, flocal);
+    pcur = pcur + tmin * dirvec;
+    zcur = zcur + tmin;
+    lrem = lrem - tmin;
+    e = enext;
+    if e > 0
+        % re-express bary in the new tet's local node order (face nodes are
+        % shared but typically permuted in the new tet's local indexing)
+        elemnodes_next = cfg.elem(e, 1:4);
+        verts_next = cfg.node(elemnodes_next, 1:3)';
+        barycur = ([verts_next; ones(1, 4)] \ [pcur(:); 1])';
+    else
+        barycur = baryexit;
+    end
+end
+
+geom.elemids = elemids;
+geom.zs = zs;
+geom.barys_in = barys_in;
+geom.barys_out = barys_out;
+
+function rowvec = ray_integrate(geom, amp, rate, cfg)
+% accumulate the closed-form integral amp * exp(-rate * z) * baryc(z) across
+% all recorded tets onto an Nn-row vector. baryc is linear in z within each
+% tet, so the per-tet integral is exact. amp and rate are decoupled so the
+% physically motivated weights (amp = mu_s', rate = mu_tr) can be set
+% independently. With amp = mu_s' and rate = mu_tr, total ray integral
+% equals the transport albedo mu_s'/mu_tr (=1 only when mu_a -> 0).
+
+nn = size(cfg.node, 1);
+rowvec = zeros(1, nn);
+ntet = size(geom.elemids, 1);
+if ntet == 0
+    return
+end
+for k = 1:ntet
+    e = geom.elemids(k);
+    z_in = geom.zs(k, 1);
+    z_out = geom.zs(k, 2);
+    b_in = geom.barys_in(k, :);
+    b_out = geom.barys_out(k, :);
+    dl = z_out - z_in;
+    if dl <= 0
+        continue
+    end
+    x = rate * dl;
+    if abs(x) < 1e-3
+        % Taylor expansion to avoid catastrophic cancellation when rate*dl ~ 0
+        A = dl * (1 - x / 2 + x * x / 6 - x * x * x / 24);
+        B = dl * dl * (0.5 - x / 3 + x * x / 8 - x * x * x / 30);
+    else
+        e_d = exp(-x);
+        A = -expm1(-x) / rate;          % integral of exp(-rate*u) from 0 to dl
+        B = A / rate - dl * e_d / rate; % integral of u*exp(-rate*u) from 0 to dl
+    end
+    scale = amp * exp(-rate * z_in);
+    contrib = scale * (b_in * A + (b_out - b_in) * (B / dl));
+    elemnodes = cfg.elem(e, 1:4);
+    rowvec(elemnodes) = rowvec(elemnodes) + contrib;
 end

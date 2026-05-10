@@ -56,6 +56,7 @@ if (~isfield(cfg, 'srcpos'))
     error('cfg.srcpos field is missing');
 end
 src_is_line = isfield(cfg, 'srctype') && strcmp(cfg.srctype, 'line');
+src_is_ray  = isfield(cfg, 'srctype') && strcmp(cfg.srctype, 'ray');
 if (~isfield(cfg, 'srcdir') && ~src_is_line)
     error('cfg.srcdir field is missing');
 end
@@ -127,11 +128,12 @@ else
     end
 end
 det_is_line = isfield(cfg, 'detpos') && isfield(cfg, 'dettype') && strcmp(cfg.dettype, 'line');
-if (((isfield(cfg, 'srctype') && ~ismember(cfg.srctype, {'pencil', 'isotropic'})) || isfield(cfg, 'widesrcid') || src_is_line) && ~isfield(cfg, 'widesrc'))
+det_is_ray  = isfield(cfg, 'detpos') && isfield(cfg, 'dettype') && strcmp(cfg.dettype, 'ray');
+if (((isfield(cfg, 'srctype') && ~ismember(cfg.srctype, {'pencil', 'isotropic'})) || isfield(cfg, 'widesrcid') || src_is_line || src_is_ray) && ~isfield(cfg, 'widesrc'))
     cfg.srcpos0 = cfg.srcpos;
     cfg = rbsrc2bc(cfg);
 end
-if (((isfield(cfg, 'dettype') && ~ismember(cfg.dettype, {'pencil', 'isotropic'})) || isfield(cfg, 'widedetid') || det_is_line) && ~isfield(cfg, 'widedet'))
+if (((isfield(cfg, 'dettype') && ~ismember(cfg.dettype, {'pencil', 'isotropic'})) || isfield(cfg, 'widedetid') || det_is_line || det_is_ray) && ~isfield(cfg, 'widedet'))
     cfg.detpos0 = cfg.detpos;
     cfg = rbsrc2bc(cfg, 1);
 end

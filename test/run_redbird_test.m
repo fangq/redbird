@@ -722,6 +722,54 @@ detD = rbrunforward(cfgD);
 test_redbird('DOT line-src forward returns finite', ...
              @(x) all(isfinite(x(:))), true, detD);
 
+% ---- ray source: collimated-beam model (Haskell et al. 1994, eq 2.4.5) ----
+% mu_s' * exp(-mu_s' * l) weighted line-of-sources along cfg.srcdir, normalized
+% so total RHS sum = 1 and mean depth = l_tr.
+cfgY = struct;
+[cfgY.node, cfgY.face, cfgY.elem] = meshabox([0 0 0], [40 40 40], 8);
+cfgY.seg = ones(size(cfgY.elem, 1), 1);
+cfgY.srctype = 'ray';
+cfgY.srcpos = [20 20 0];
+cfgY.srcdir = [0 0 1];
+cfgY.dettype = 'ray';
+cfgY.detpos = [10 10 0];
+cfgY.detdir = [0 0 1];
+cfgY.prop = [0 0 1 1; 0.01 1 0 1.37];   % mua=0.01, mus=1, g=0 -> mus'=1 -> l_tr=1mm
+cfgY.omega = 0;
+cfgY = rbmeshprep(cfgY);
+
+test_redbird('ray src -> widesrc populated', @isfield, true, cfgY, 'widesrc');
+test_redbird('ray det -> widedet populated', @isfield, true, cfgY, 'widedet');
+% with mua=0.01, mus'=1 -> mu_tr=1.01, transport albedo = mus'/mu_tr = 0.99
+test_redbird('ray widesrc sum ~ transport albedo', ...
+             @(x) abs(x - 1 / 1.01) < 5e-3, true, sum(cfgY.widesrc(1, :)));
+test_redbird('ray widedet sum ~ transport albedo', ...
+             @(x) abs(x - 1 / 1.01) < 5e-3, true, sum(cfgY.widedet(1, :)));
+
+% center-of-mass along srcdir should equal 1/mu_tr = 0.99 mm
+zcoord = cfgY.node(:, 3);
+zcom = sum(zcoord' .* cfgY.widesrc(1, :)) / sum(cfgY.widesrc(1, :));
+test_redbird('ray src mean depth ~ 1/mu_tr', ...
+             @(z) abs(z - 1 / 1.01) < 0.05, true, zcom);
+
+detY = rbrunforward(cfgY);
+test_redbird('DOT ray-src forward returns finite', ...
+             @(x) all(isfinite(x(:))), true, detY);
+test_redbird('DOT ray-src forward non-trivial', ...
+             @(x) max(abs(x(:))) > 0, true, detY);
+
+% missing srcdir should error for ray type
+cfgYerr = struct;
+[cfgYerr.node, cfgYerr.face, cfgYerr.elem] = meshabox([0 0 0], [40 40 40], 8);
+cfgYerr.seg = ones(size(cfgYerr.elem, 1), 1);
+cfgYerr.srctype = 'ray';
+cfgYerr.srcpos = [20 20 0];
+cfgYerr.detpos = [30 30 0];
+cfgYerr.prop = [0 0 1 1; 0.01 1 0 1.37];
+cfgYerr.omega = 0;
+test_redbird('ray src without srcdir errors', ...
+             @() rbmeshprep(cfgYerr), 'error');
+
 % ---- analytic checks: k-formula and physics-driven invariants ----
 
 % k_bg formula: in vacuum (eps_r=1, sigma=0), k = omega / c with c in mm/s.

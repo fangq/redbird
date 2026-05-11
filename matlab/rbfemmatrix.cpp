@@ -1,21 +1,30 @@
 /*
  * =============================================================
- * FEM Kernel for diffusioin equation
- * Author: Qianqian Fang(fangq < at > nmr.mgh.harvard.edu)
- * Date: 2007/11/21
- * Version: 0.5.0
+ * FEM Kernel for the diffusion equation (DOT) and the scalar
+ * Helmholtz equation (MWT).
+ * Author: Qianqian Fang(q.fang < at > neu.edu)
+ * Created on: 2007/11/21
+ * Version: 0.8.0
  *
- * Model:
- *    [A]*c=-OC
- * where [A]=<D delPhi_i,delPhi_j>
- * OC is the vector for oxygen consumption at each node
- * boundary condition is dot(delc,normal)=0
+ * DOT Model:
+ *    [A]*c = b,  [A] = <D del phi_i, del phi_j> + <mua phi_i, phi_j>
+ *                  + i*omega/c0*nref <phi_i,phi_j> + Robin BC
+ * MWT Model (cfg.helmholtz=1 or cfg.bulkprop given):
+ *    [A]*E = b,  [A] = <del phi_i, del phi_j> - <k^2 phi_i, phi_j>
+ *                  + 1st-order Bayliss-Turkel radiation BC
+ *    where k^2(x) = omega^2*mu0(x)*eps0*eps_r(x) - i*omega*mu0(x)*sigma(x)
+ *
+ * In MWT mode cfg.prop columns are reinterpreted as
+ *    [eps_r, sigma(S/mm), mu0(H/mm), n]
+ * and the medium struct slots mua/mus/g/n are reused to carry them.
  * =============================================================
  */
 
 #include <string.h>
 #include <exception>
 #include <stdio.h>
+#include <math.h>
+#include <complex>
 
 #include "mex.h"
 #include "rbfemmatrix.h"
@@ -141,8 +150,16 @@ void mexFunction(int nlhs,       mxArray* plhs[],
             }
         }
 
+        /* In Helmholtz/MWT mode the operator is always complex when omega>0
+         * (mass term has +i*omega*mu*sigma) and the Bayliss-Turkel BC has
+         * an imaginary part proportional to i*kbg.  Treat any non-zero
+         * omega in helmholtz mode the same as the DOT frequency-domain
+         * case below.  In the (degenerate) omega=0 helmholtz case the
+         * matrix is real and we fall through to the else branch. */
+        int wantcomplex = (cfg.omega > 0.f);
+
         /* Assign a pointer to the output. */
-        if (cfg.omega > 0.f) {
+        if (wantcomplex) {
             if (nlhs >= 1) {
                 if (isjacobian == 0) {
                     plhs[0] = mxCreateDoubleMatrix(1, mesh.nn, mxCOMPLEX);
@@ -210,15 +227,27 @@ void mexFunction(int nlhs,       mxArray* plhs[],
         if (isjacobian == 0) {
             rb_deldotdel(&cfg, &mesh, &femdata);
 
-            if (mesh.ntype == mesh.ne) {
-                rb_femmatrix_elem (&cfg, &mesh, &femdata);
-            } else if (mesh.ntype == mesh.nn) {
-                rb_femmatrix_nodal(&cfg, &mesh, &femdata);
-            } else {
-                MEXERROR("cfg.seg must have a length that matches the length of either cfg.node or cfg.elem");
-            }
+            if (cfg.helmholtz) {
+                if (mesh.ntype == mesh.ne) {
+                    rb_femmatrix_helmholtz_elem (&cfg, &mesh, &femdata);
+                } else if (mesh.ntype == mesh.nn) {
+                    rb_femmatrix_helmholtz_nodal(&cfg, &mesh, &femdata);
+                } else {
+                    MEXERROR("cfg.seg must have a length that matches the length of either cfg.node or cfg.elem");
+                }
 
-            rb_fem_bc(&cfg, &mesh, &femdata);
+                rb_fem_bc_helmholtz(&cfg, &mesh, &femdata);
+            } else {
+                if (mesh.ntype == mesh.ne) {
+                    rb_femmatrix_elem (&cfg, &mesh, &femdata);
+                } else if (mesh.ntype == mesh.nn) {
+                    rb_femmatrix_nodal(&cfg, &mesh, &femdata);
+                } else {
+                    MEXERROR("cfg.seg must have a length that matches the length of either cfg.node or cfg.elem");
+                }
+
+                rb_fem_bc(&cfg, &mesh, &femdata);
+            }
         } else {
             rb_femjacobian(&cfg, &mesh, &jac);
         }
@@ -247,9 +276,11 @@ void mcx_set_field(const mxArray* root, const mxArray* item, int idx, Config* cf
     GET_1ST_FIELD(cfg, omega)
     GET_VEC34_FIELD(cfg, srcpos)
     GET_VEC34_FIELD(cfg, srcdir)
+    GET_VEC3_FIELD(cfg, rbcorigin)
     GET_ONE_FIELD(mesh, e0)
     GET_ONE_FIELD(mesh, isreoriented)
     GET_ONE_FIELD(cfg, reff)
+    GET_ONE_FIELD(cfg, helmholtz)
     else if (strcmp(name, "node") == 0) {
         arraydim = mxGetDimensions(item);
 
@@ -496,6 +527,92 @@ void mcx_set_field(const mxArray* root, const mxArray* item, int idx, Config* cf
             jac->deldotdel = mxGetPr(item); // phi: [mesh.nn x jac.nsd]
             PRINTF(("rbm.deldotdel=<%d,10>;\n", arraydim[0]));
         }
+    } else if (strcmp(name, "bulkprop") == 0) {
+        /* Bulk medium for the 1st-order Bayliss-Turkel BC (Helmholtz/MWT).
+         * Expects a 4-element vector [eps_r, sigma, mu0, n] in matlab order.
+         * Implicitly engages helmholtz mode if not already set. */
+        arraydim = mxGetDimensions(item);
+
+        if (MAX(arraydim[0], arraydim[1]) < 3) {
+            MEXERROR("the 'bulkprop' field must have at least 3 elements: [eps_r, sigma, mu0, (n)]");
+        }
+
+        double* val = mxGetPr(item);
+        cfg->bulkprop.mua = val[0];  // eps_r (re-used slot)
+        cfg->bulkprop.mus = val[1];  // sigma
+        cfg->bulkprop.g   = val[2];  // mu0
+
+        if (MAX(arraydim[0], arraydim[1]) > 3) {
+            cfg->bulkprop.n = val[3];
+        }
+
+        cfg->helmholtz = 1;
+        PRINTF(("rbm.bulkprop=[%g %g %g %g]; helmholtz=1\n", cfg->bulkprop.mua, cfg->bulkprop.mus, cfg->bulkprop.g, cfg->bulkprop.n));
+    } else if (strcmp(name, "facecenter") == 0) {
+        arraydim = mxGetDimensions(item);
+
+        if (arraydim[0] <= 0 || arraydim[1] != 3) {
+            MEXERROR("the 'facecenter' field must have 3 columns (x,y,z) and Nf rows");
+        }
+
+        double* val = mxGetPr(item);
+        int n = arraydim[0];
+
+        if (mesh->facecenter) {
+            free(mesh->facecenter);
+        }
+
+        mesh->facecenter = (float3*)calloc(sizeof(float3), n);
+
+        for (j = 0; j < 3; j++)
+            for (i = 0; i < n; i++) {
+                ((double*)(&mesh->facecenter[i]))[j] = val[j * n + i];
+            }
+
+        PRINTF(("rbm.facecenter=<%d,3>;\n", n));
+    } else if (strcmp(name, "facenormal") == 0) {
+        arraydim = mxGetDimensions(item);
+
+        if (arraydim[0] <= 0 || arraydim[1] != 3) {
+            MEXERROR("the 'facenormal' field must have 3 columns (nx,ny,nz) and Nf rows");
+        }
+
+        double* val = mxGetPr(item);
+        int n = arraydim[0];
+
+        if (mesh->facenormal) {
+            free(mesh->facenormal);
+        }
+
+        mesh->facenormal = (float3*)calloc(sizeof(float3), n);
+
+        for (j = 0; j < 3; j++)
+            for (i = 0; i < n; i++) {
+                ((double*)(&mesh->facenormal[i]))[j] = val[j * n + i];
+            }
+
+        PRINTF(("rbm.facenormal=<%d,3>;\n", n));
+    } else if (strcmp(name, "facer") == 0) {
+        arraydim = mxGetDimensions(item);
+
+        if (MAX(arraydim[0], arraydim[1]) == 0) {
+            MEXERROR("the 'facer' field can not be empty");
+        }
+
+        double* val = mxGetPr(item);
+        int n = MAX(arraydim[0], arraydim[1]);
+
+        if (mesh->facer) {
+            free(mesh->facer);
+        }
+
+        mesh->facer = (double*)malloc(sizeof(double) * n);
+
+        for (i = 0; i < n; i++) {
+            mesh->facer[i] = val[i];
+        }
+
+        PRINTF(("rbm.facer=<%d>;\n", n));
     } else if (strcmp(name, "detpos") == 0) {
         // do nothing
     } else if (strcmp(name, "srctype") == 0) {
@@ -536,6 +653,9 @@ void mcx_set_field(const mxArray* root, const mxArray* item, int idx, Config* cf
 void config_init(Config* cfg) {
     cfg->omega = 0.f;
     cfg->reff = N137_REFF;
+    cfg->helmholtz = 0;
+    memset(&(cfg->bulkprop), 0, sizeof(medium));
+    memset(&(cfg->rbcorigin), 0, sizeof(float3));
     memset(&(cfg->srcpos), 0, sizeof(float4));
     memset(&(cfg->srcdir), 0, sizeof(float4));
 }
@@ -580,6 +700,9 @@ void mesh_init(tetmesh* mesh) {
     mesh->med = NULL;
     mesh->evol = NULL;
     mesh->area = NULL;
+    mesh->facecenter = NULL;
+    mesh->facenormal = NULL;
+    mesh->facer = NULL;
     mesh->rows = NULL;
     mesh->cols = NULL;
     mesh->idxcount = NULL;
@@ -629,6 +752,21 @@ void mesh_clear(tetmesh* mesh) {
         mesh->evol = NULL;
     }
 
+    if (mesh->facecenter) {
+        free(mesh->facecenter);
+        mesh->facecenter = NULL;
+    }
+
+    if (mesh->facenormal) {
+        free(mesh->facenormal);
+        mesh->facenormal = NULL;
+    }
+
+    if (mesh->facer) {
+        free(mesh->facer);
+        mesh->facer = NULL;
+    }
+
     if (mesh->rows) {
         free(mesh->rows);
         mesh->rows = NULL;
@@ -650,6 +788,20 @@ void mesh_clear(tetmesh* mesh) {
     }
 }
 
+/*
+ * Adjoint Jacobian for DOT (mua,D) and MWT (eps_r,sigma).
+ *
+ * The element/nodal mass-weighted integration here computes
+ *    Jmua = -<phi_s, phi_r>_M           (complex when phi is complex)
+ *    Jd   = -<grad phi_s, grad phi_r>_K
+ * regardless of whether phi solves the diffusion or the Helmholtz
+ * equation - the discrete bilinear forms are identical.  In MWT mode
+ * the same output represents Jk^2 = -Jmua and the matlab caller chains
+ *    Jeps   = -(omega^2*mu0*eps0) * Jmua
+ *    Jsigma = ( 1j*omega*mu0    ) * Jmua
+ * (see rbmultispectral.m, ishelmholtz branch).  Jd is meaningful only
+ * for DOT and should be ignored in MWT mode.
+ */
 void rb_femjacobian(Config* cfg, tetmesh* mesh, Jacobian* jac) {
     int t, sd, sid, rid, i, j;
     int pairs[3][10] = {{0, 0, 0, 1, 1, 2}, {1, 2, 3, 2, 3, 3}, {1, 2, 3, 5, 6, 8}}; //pairs[0]<->[1], local node pairs, [3] pos in deldotdel
@@ -1076,6 +1228,263 @@ void rb_fem_bc(Config* cfg, tetmesh* mesh, Forward* fem) {
     }
 }
 
+/*
+ * Element-based Helmholtz/MWT stiffness matrix.
+ * Per-element coefficients (from rbfemlhs.m, ishelmholtz branch):
+ *   avol  = 1                                        (stiffness)
+ *   breal = -omega^2 * mu0 * eps0 * eps_r            (mass, real part)
+ *   bimag =  omega   * mu0 * sigma                   (mass, imag part)
+ * Property slots are reused: mua->eps_r, mus->sigma, g->mu0, n->n.
+ * The mass-matrix weights (0.10*Ve diag, 0.05*Ve off-diag) and sparsity
+ * are identical to the DOT element path, so the routine mirrors
+ * rb_femmatrix_elem with the (avol,breal,bimag) substitution.
+ */
+void rb_femmatrix_helmholtz_elem(Config* cfg, tetmesh* mesh, Forward* fem) {
+    double eps_r, sigma, mu0_e;
+    double breal, bimag;
+    int i, j, t, ii, jj, ij, *ee;
+    double ra, ri, Ve, deldotdel, sm;
+    double omega = cfg->omega;
+    double omega2 = omega * omega;
+
+    if (fem->Dr) {
+        memset(fem->Dr, 0, mesh->nn * sizeof(double));
+    }
+
+    if (fem->Di) {
+        memset(fem->Di, 0, mesh->nn * sizeof(double));
+    }
+
+    if (fem->Ar) {
+        memset(fem->Ar, 0, mesh->ntot * sizeof(double));
+    }
+
+    if (fem->Ai) {
+        memset(fem->Ai, 0, mesh->ntot * sizeof(double));
+    }
+
+    for (t = 0; t < mesh->ne; t++) {
+        Ve = mesh->evol[t];
+        ee = (int*)(mesh->elem + t);
+
+        eps_r = mesh->med[mesh->type[t]].mua;
+        sigma = mesh->med[mesh->type[t]].mus;
+        mu0_e = mesh->med[mesh->type[t]].g;
+
+        breal = -omega2 * mu0_e * EPS0_MM * eps_r;
+        bimag =  omega  * mu0_e * sigma;
+
+        for (i = 0; i < 4; i++) {
+            ii = ee[i];
+
+            for (j = i; j < 4; j++) {
+                jj = ee[j];
+                deldotdel = fem->deldotdel[t * 10 + (i << 2) + j - i - (i > 1) - ((i > 2) << 1)];
+
+                sm = Ve * 0.05;
+
+                if (i == j) {
+                    sm = Ve * 0.1;
+                }
+
+                /* stiffness (avol=1) + real part of -k^2 mass */
+                ra = deldotdel + breal * sm;
+                /* imag part of -k^2 mass */
+                ri = bimag * sm;
+
+                if (ii == jj) {
+                    fem->Dr[ii] += ra;
+
+                    if (fem->Di) {
+                        fem->Di[ii] += ri;
+                    }
+                } else {
+                    ij = sub2ind(mesh, ii, jj);
+                    fem->Ar[ij] += ra;
+
+                    if (fem->Ai) {
+                        fem->Ai[ij] += ri;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/*
+ * Nodal Helmholtz/MWT stiffness matrix.  Same sparsity & mass weights as
+ * the DOT nodal path; only the per-node (avol,breal,bimag) substitution
+ * differs.  Stiffness contribution per element is summed over its 4
+ * nodes with weight 0.25 (already folded into deldotdel here), so with
+ * avol=1 the four-fold sum recovers the full deldotdel.
+ */
+void rb_femmatrix_helmholtz_nodal(Config* cfg, tetmesh* mesh, Forward* fem) {
+    double eps_r, sigma, mu0_e;
+    double breal_k, bimag_k;
+    int i, j, k, t, ii, jj, ij, *ee;
+    double ra, ri, Ve, deldotdel, sm;
+    double omega = cfg->omega;
+    double omega2 = omega * omega;
+
+    if (fem->Dr) {
+        memset(fem->Dr, 0, mesh->nn * sizeof(double));
+    }
+
+    if (fem->Di) {
+        memset(fem->Di, 0, mesh->nn * sizeof(double));
+    }
+
+    if (fem->Ar) {
+        memset(fem->Ar, 0, mesh->ntot * sizeof(double));
+    }
+
+    if (fem->Ai) {
+        memset(fem->Ai, 0, mesh->ntot * sizeof(double));
+    }
+
+    for (t = 0; t < mesh->ne; t++) {
+        Ve = mesh->evol[t];
+        ee = (int*)(mesh->elem + t);
+
+        for (i = 0; i < 4; i++) {
+            ii = ee[i];
+
+            for (j = i; j < 4; j++) {
+                jj = ee[j];
+                deldotdel = fem->deldotdel[t * 10 + (i << 2) + j - i - (i > 1) - ((i > 2) << 1)] * 0.25;
+
+                ra = 0.0;
+                ri = 0.0;
+
+                for (k = 0; k < 4; k++) {
+                    sm = Ve * (1.0 / 120.);
+
+                    if (i == j || i == k || j == k) {
+                        sm = Ve * (1.0 / 60.);
+                    }
+
+                    if (i == j && i == k) {
+                        sm = Ve * (1.0 / 20.);
+                    }
+
+                    eps_r = mesh->med[mesh->type[ee[k]]].mua;
+                    sigma = mesh->med[mesh->type[ee[k]]].mus;
+                    mu0_e = mesh->med[mesh->type[ee[k]]].g;
+
+                    breal_k = -omega2 * mu0_e * EPS0_MM * eps_r;
+                    bimag_k =  omega  * mu0_e * sigma;
+
+                    /* avol=1 stiffness (4*0.25*deldotdel = deldotdel) + nodal mass */
+                    ra += deldotdel + breal_k * sm;
+                    ri += bimag_k * sm;
+                }
+
+                if (ii == jj) {
+                    fem->Dr[ii] += ra;
+
+                    if (fem->Di) {
+                        fem->Di[ii] += ri;
+                    }
+                } else {
+                    ij = sub2ind(mesh, ii, jj);
+                    fem->Ar[ij] += ra;
+
+                    if (fem->Ai) {
+                        fem->Ai[ij] += ri;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/*
+ * First-order Bayliss-Turkel radiation boundary condition for MWT/
+ * Helmholtz (matches rbfemlhs.m).  For each boundary face t the per-
+ * face contribution is
+ *   bccoef(t) = (i*kbg - 1/(2*r(t))) * (rhat dot n_hat)
+ * where kbg = sqrt(omega^2*mu*eps0*eps_bulk - i*omega*mu*sigma_bulk)
+ * is the bulk wavenumber and r(t)=|facecenter(t)-rbcorigin|.
+ * The face mass-matrix integrates to (area/6) on the three diagonal
+ * entries and (area/12)=(area/6)*0.5 on the three off-diagonal pairs.
+ */
+void rb_fem_bc_helmholtz(Config* cfg, tetmesh* mesh, Forward* fem) {
+    if (!mesh->facecenter || !mesh->facenormal || !mesh->facer) {
+        MEXERROR("Helmholtz BC requires cfg.facecenter, cfg.facenormal and cfg.facer");
+    }
+
+    typedef std::complex<double> cplx;
+
+    double omega = cfg->omega;
+    double eps_b = cfg->bulkprop.mua;
+    double sigma_b = cfg->bulkprop.mus;
+    double mu_b = cfg->bulkprop.g;
+
+    /* k^2 of the bulk medium and kbg = sqrt(k^2). std::sqrt picks the
+     * principal branch (Re kbg >= 0), matching matlab's sqrt(). */
+    cplx k2bg(omega * omega * mu_b * EPS0_MM * eps_b,
+              -omega * mu_b * sigma_b);
+    cplx kbg = std::sqrt(k2bg);
+
+    for (int t = 0; t < mesh->nf; t++) {
+        double rx = mesh->facecenter[t].x - cfg->rbcorigin.x;
+        double ry = mesh->facecenter[t].y - cfg->rbcorigin.y;
+        double rz = mesh->facecenter[t].z - cfg->rbcorigin.z;
+        double r = mesh->facer[t];
+
+        if (r == 0.0) {
+            continue;    /* face centroid coincides with origin: skip */
+        }
+
+        double rdotn = (rx * mesh->facenormal[t].x
+                        + ry * mesh->facenormal[t].y
+                        + rz * mesh->facenormal[t].z) / r;
+
+        cplx bccoef = (cplx(0.0, 1.0) * kbg - cplx(1.0 / (2.0 * r), 0.0)) * rdotn;
+        cplx adiag = (mesh->area[t] / 6.0) * bccoef;
+        cplx aoffd = adiag * 0.5;
+
+        double dr = adiag.real(), di = adiag.imag();
+        double or_ = aoffd.real(), oi = aoffd.imag();
+
+        int v0 = mesh->face[t].x;
+        int v1 = mesh->face[t].y;
+        int v2 = mesh->face[t].z;
+
+        fem->Dr[v0] += dr;
+        fem->Dr[v1] += dr;
+        fem->Dr[v2] += dr;
+
+        if (fem->Di) {
+            fem->Di[v0] += di;
+            fem->Di[v1] += di;
+            fem->Di[v2] += di;
+        }
+
+        int ij;
+        ij = sub2ind(mesh, v0, v1);
+        fem->Ar[ij] += or_;
+
+        if (fem->Ai) {
+            fem->Ai[ij] += oi;
+        }
+
+        ij = sub2ind(mesh, v0, v2);
+        fem->Ar[ij] += or_;
+
+        if (fem->Ai) {
+            fem->Ai[ij] += oi;
+        }
+
+        ij = sub2ind(mesh, v1, v2);
+        fem->Ar[ij] += or_;
+
+        if (fem->Ai) {
+            fem->Ai[ij] += oi;
+        }
+    }
+}
+
 int sub2ind(tetmesh* mesh, int i, int j) {
     int base, ij = -1, k;
     base = (int)(mesh->idxsum[i] - mesh->idxcount[i]);
@@ -1098,7 +1507,18 @@ extern "C" int rb3_throw_exception(const int id, const char* msg, const char* fi
 }
 
 void rb3_usage() {
-    printf("Usage:\n    [flux,detphoton]=rbforward(cfg);\n\nPlease run 'help mmclab' for more details.\n");
+    printf("Usage:\n"
+           "    [Adiag,Aoff,deldotdel] = rbfemmatrix(cfg);\n"
+           "    [Jmua,Jd]              = rbfemmatrix(cfg,sd,phi[,deldotdel[,isnodal]]);\n"
+           "\nDOT mode (default): cfg.prop columns are [mua mus g n].\n"
+           "MWT/Helmholtz mode (engaged by cfg.helmholtz=1 or by providing\n"
+           "cfg.bulkprop): cfg.prop columns are reinterpreted as\n"
+           "[eps_r sigma(S/mm) mu0(H/mm) n].  In MWT mode the caller must\n"
+           "also provide cfg.bulkprop=[eps_r sigma mu0 (n)], cfg.rbcorigin,\n"
+           "cfg.facecenter, cfg.facenormal and cfg.facer for the first-order\n"
+           "Bayliss-Turkel radiation boundary condition.  The Jacobian output\n"
+           "Jmua in MWT mode represents -<phi_s,phi_r>_M; the caller chains it\n"
+           "to Jeps = -(omega^2*mu0*eps0)*Jmua and Jsigma = (1j*omega*mu0)*Jmua.\n");
 }
 
 extern "C" void rb3_flush() {

@@ -25,6 +25,7 @@
 #define MAX(a,b)  ((a)>(b)?(a):(b))
 #define MEXERROR(a)  rb3_throw_exception(999,a,__FILE__,__LINE__)
 #define R_C0       3.335640951981520e-12f  //1/C0 in s/mm
+#define EPS0_MM    8.854187817e-15         //vacuum permittivity in F/mm (Helmholtz/MWT)
 
 typedef struct Float4 {
     double x, y, z, w;
@@ -52,6 +53,9 @@ typedef struct Medium {
 typedef struct RedbirdConfig {
     double omega;
     double reff;
+    int helmholtz;       /**< 0: diffusion (DOT); 1: Helmholtz (MWT) */
+    medium bulkprop;     /**< bulk medium for Bayliss-Turkel BC; reused medium slots: mua=eps_r, mus=sigma, g=mu0, n=n */
+    float3 rbcorigin;    /**< origin of the Bayliss-Turkel radiation boundary */
     float4 srcpos;
     float4 srcdir;
 } Config;
@@ -72,6 +76,9 @@ typedef struct MMC_mesh {
     medium* med; /**< optical property of different media */
     double* evol; /**< volume of an element */
     double* area; /**< area of the triangular face */
+    float3* facecenter; /**< Nf x 3, face centroids (Helmholtz/MWT) */
+    float3* facenormal; /**< Nf x 3, face outward unit normals (Helmholtz/MWT) */
+    double* facer;      /**< Nf x 1, distance from face centroid to rbcorigin (Helmholtz/MWT) */
     int* rows;
     int* cols;
     int* idxcount;
@@ -106,7 +113,10 @@ typedef struct FEMJacobian {
 
 void rb_femmatrix_nodal(Config* cfg, tetmesh* mesh, Forward* fem);
 void rb_femmatrix_elem (Config* cfg, tetmesh* mesh, Forward* fem);
+void rb_femmatrix_helmholtz_nodal(Config* cfg, tetmesh* mesh, Forward* fem);
+void rb_femmatrix_helmholtz_elem (Config* cfg, tetmesh* mesh, Forward* fem);
 void rb_fem_bc(Config* cfg, tetmesh* mesh, Forward* fem);
+void rb_fem_bc_helmholtz(Config* cfg, tetmesh* mesh, Forward* fem);
 void rb_deldotdel(Config* cfg, tetmesh* mesh, Forward* fem);
 void rb_femjacobian(Config* cfg, tetmesh* mesh, Jacobian* jac);
 

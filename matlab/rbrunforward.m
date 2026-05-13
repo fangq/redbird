@@ -180,6 +180,13 @@ if (isfield(cfg, 'nphoton'))
 
         [optodeloc, optodebary] = tsearchn(cfg.node(:, 1:3), cfg.elem(:, 1:4), cfg.detpos(:, 1:3));
 
+        % Save the original multi-source cfg.srcpos / cfg.srcdir so the
+        % per-source mmclab loop below can rotate one source at a time.
+        % (mmclab takes cfg.srcpos as a single float4; multi-source redbird
+        % configurations must be looped on the host side.)
+        srcposAll = cfg.srcpos;
+        srcdirAll = cfg.srcdir;
+
         for waveid = wavelengths
             wv = waveid{1};
             if (ismulti)
@@ -195,10 +202,11 @@ if (isfield(cfg, 'nphoton'))
             % carries n and g for outside-mesh transitions; cfg.elemprop is
             % set to the single bulk tissue index everywhere.
             if (size(cfg.prop, 1) == size(cfg.node, 1))
-                cfg.nodemua    = single(cfg.prop(:, 1));
+                % keep as double - mmclab.cpp's parser reads via mxGetPr
+                cfg.nodemua    = double(cfg.prop(:, 1));
                 cfg.isnodalmua = 1;
                 if (isfield(cfg, 'omega') && cfg.omega > 0)
-                    cfg.nodemusp    = single(cfg.prop(:, 2));
+                    cfg.nodemusp    = double(cfg.prop(:, 2));
                     cfg.isnodalmusp = 1;
                 end
                 bulk = mean(cfg.prop, 1);
@@ -209,35 +217,62 @@ if (isfield(cfg, 'nphoton'))
                 cfg.elemprop = ones(size(cfg.elem, 1), 1);
             end
 
-            out = mmclab(cfg);
-
-            % flux.data shapes (after the dim-order fix in mmc):
-            %   multi-slot mesh (Ns+Nd):    [nn, maxgate, Ns+Nd]
-            %   pattern (srcnum>1):         [srcnum, nn, maxgate]
-            %   single source:              [nn, maxgate]
-            phiwv = squeeze(out.data);
-            if (ismatrix(phiwv) && size(phiwv, 1) ~= size(cfg.node, 1) && size(phiwv, 2) == size(cfg.node, 1))
-                phiwv = phiwv.';  % defensive: ensure first dim is nn
+            phiwv    = zeros(size(cfg.node, 1), srcnum + detnum);
+            detphiwv = nan(detnum, srcnum);
+            if (needJacobian)
+                Jmua_wv = zeros(srcnum * detnum, size(cfg.node, 1));
+                Jd_wv   = zeros(srcnum * detnum, size(cfg.node, 1));
             end
 
-            % compute detphi by interpolating forward-source fluence at detector positions
-            phisrc = phiwv(:, 1:min(srcnum, size(phiwv, 2)));
-            detphiwv = nan(detnum, srcnum);
-            for d = 1:detnum
-                if (~isnan(optodeloc(d)))
-                    nodes_d = cfg.elem(optodeloc(d), 1:4);
-                    for s = 1:size(phisrc, 2)
-                        detphiwv(d, s) = optodebary(d, :) * phisrc(nodes_d, s);
+            for s = 1:srcnum
+                cfg.srcpos = srcposAll(s, :);
+                if (size(srcdirAll, 1) > 1)
+                    cfg.srcdir = srcdirAll(s, :);
+                else
+                    cfg.srcdir = srcdirAll;
+                end
+                cfg.srcdata = [];   % force mmclab to (re)build srcdata for this single source
+
+                out = mmclab(cfg);
+                if (needJacobian && ~isfield(out, 'jmua'))
+                    fprintf(2, '[diag] s=%d: out fields = %s; outputtype=%s; size(detpos)=[%d,%d]; size(detdir)=[%d,%d]\n', ...
+                            s, strjoin(fieldnames(out), ','), cfg.outputtype, ...
+                            size(cfg.detpos, 1), size(cfg.detpos, 2), ...
+                            size(cfg.detdir, 1), size(cfg.detdir, 2));
+                end
+
+                % flux.data shape this call: [nn, maxgate, 1+Nd] for multi-slot;
+                % squeeze to drop maxgate=1 -> [nn, 1+Nd].
+                phisingle = squeeze(out.data);
+                if (~isvector(phisingle) && size(phisingle, 1) ~= size(cfg.node, 1) && size(phisingle, 2) == size(cfg.node, 1))
+                    phisingle = phisingle.';
+                end
+
+                % forward-source fluence (slot 0) and detector-as-adjoint-source fluences (slots 1..Nd)
+                phiwv(:, s) = phisingle(:, 1);
+                phiwv(:, srcnum + 1:end) = phiwv(:, srcnum + 1:end) + phisingle(:, 2:end) / srcnum;
+
+                % detphi at each detector position from this source
+                for d = 1:detnum
+                    if (~isnan(optodeloc(d)))
+                        nodes_d = cfg.elem(optodeloc(d), 1:4);
+                        detphiwv(d, s) = optodebary(d, :) * phisingle(nodes_d, 1);
                     end
+                end
+
+                if (needJacobian)
+                    % out.jmua is [nn, 1*Nd] this call; map into rows (s-1)*Nd+1..s*Nd
+                    jmua_s = double(out.jmua).';     % [Nd, nn]
+                    jd_s   = double(out.jd).';
+                    rowidx = (s - 1) * detnum + 1:s * detnum;
+                    Jmua_wv(rowidx, :) = jmua_s;
+                    Jd_wv(rowidx, :)   = jd_s;
                 end
             end
 
-            if (needJacobian)
-                % mmc returns jmua/jd as single-precision [nn, Ns*Nd];
-                % redbird convention is double [Nsd, nn].
-                Jmua_wv = double(out.jmua).';
-                Jd_wv   = double(out.jd).';
-            end
+            % restore multi-source cfg fields for any downstream caller
+            cfg.srcpos = srcposAll;
+            cfg.srcdir = srcdirAll;
 
             if (ismulti)
                 phi(wv)    = phiwv;

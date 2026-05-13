@@ -204,7 +204,7 @@ for iter = 1:maxiter
     end
 
     %     run forward on forward mesh
-    [detphi, phi] = rbrunforward(cfg, 'solverflag', solverflag, 'sd', sd, 'rfcw', rfcw);
+    [detphi, phi, ~, ~, ~, Jext] = rbrunforward(cfg, 'solverflag', solverflag, 'sd', sd, 'rfcw', rfcw);
 
     if isfield(cfg, 'sdscale')
         for ii = 1:length(phi)
@@ -227,7 +227,16 @@ for iter = 1:maxiter
         omegas = 0;
     end
 
-    if (isfield(cfg, 'omega') && (any(omegas > 0)) && ismember(1, rfcw)) % if RF data
+    if (~isempty(Jext) && isstruct(Jext) && isfield(Jext, 'mua'))
+        % mmc Monte Carlo forward solver returned the Jacobian alongside
+        % phi; reuse it directly and skip rbjac/rbjacmex. Jext.mua and
+        % Jext.dcoeff are already in the [Nsd x Nn] convention (double
+        % precision, containers.Map keyed by wavelength for multi-spectral).
+        Jmua = Jext.mua;
+        if (isfield(Jext, 'dcoeff') && ~isempty(Jext.dcoeff))
+            Jd = Jext.dcoeff;
+        end
+    elseif (isfield(cfg, 'omega') && (any(omegas > 0)) && ismember(1, rfcw)) % if RF data
         %     if(isfield(cfg,'omega') && (cfg.omega>0 || any(omegas>0)) && ismember(1,rfcw)) % if RF data
         % currently, only support node-based values; rbjac supports
         % multiple wavelengths, in such case, it returns a containers.Map

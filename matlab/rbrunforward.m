@@ -134,8 +134,13 @@ if (isfield(cfg, 'nphoton'))
         if (needJacobian)
             % adjoint Jacobian path -> mmc returns J_mua and J_D
             if (~isfield(cfg, 'detdir') || isempty(cfg.detdir))
-                error(['rbrunforward: MC adjoint Jacobian requires cfg.detdir ' ...
-                       '(Nd-by-4 inward detector normal + focal length).']);
+                if (jsonopt('autodetdir', 1, opt))
+                    cfg.detdir = rbgetdetdir(cfg);
+                    fprintf(1, '[rbrunforward] cfg.detdir auto-filled via rbgetdetdir (%d detectors)\n', size(cfg.detdir, 1));
+                else
+                    error(['rbrunforward: MC adjoint Jacobian requires cfg.detdir ' ...
+                           '(Nd-by-4 inward detector normal + focal length).']);
+                end
             end
             if (size(cfg.detdir, 2) < 4)
                 cfg.detdir(:, 4) = 0;
@@ -179,6 +184,29 @@ if (isfield(cfg, 'nphoton'))
             wv = waveid{1};
             if (ismulti)
                 cfg.prop = propAll(wv);
+            end
+
+            % Per-node optical-property mode for DOT reconstruction.
+            % When cfg.prop has one row per forward-mesh node, route the
+            % mua (and, for RF, musp) columns into cfg.nodemua / cfg.nodemusp
+            % so mmc's per-node global-memory path is used (see mmc PR#3).
+            % cfg.prop itself is reduced to a 2-row table
+            % [outside; bulk-fallback] so the constant-memory gmed[] still
+            % carries n and g for outside-mesh transitions; cfg.elemprop is
+            % set to the single bulk tissue index everywhere.
+            if (size(cfg.prop, 1) == size(cfg.node, 1))
+                cfg.nodemua    = single(cfg.prop(:, 1));
+                cfg.isnodalmua = 1;
+                if (isfield(cfg, 'omega') && cfg.omega > 0)
+                    cfg.nodemusp    = single(cfg.prop(:, 2));
+                    cfg.isnodalmusp = 1;
+                end
+                bulk = mean(cfg.prop, 1);
+                if (bulk(2) < 1e-3)
+                    bulk(2) = 1e-3;
+                end   % avoid mus=0 for path sampling
+                cfg.prop = [0 0 1 1; bulk(1) bulk(2) 0 bulk(4)];
+                cfg.elemprop = ones(size(cfg.elem, 1), 1);
             end
 
             out = mmclab(cfg);

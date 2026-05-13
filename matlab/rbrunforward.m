@@ -1,8 +1,10 @@
-function [detval, phi, Amat, rhs, sflag] = rbrunforward(cfg, varargin)
+function [detval, phi, Amat, rhs, sflag, Jext] = rbrunforward(cfg, varargin)
 %
 % [detval, phi]=rbrunforward(cfg)
 %    or
 % [detval, phi, Amat, rhs]=rbrunforward(cfg,'param1',value1,...)
+%    or
+% [detval, phi, Amat, rhs, sflag, Jext]=rbrunforward(cfg,'param1',value1,...)
 %
 % Perform forward simulations at all sources and all wavelengths based on the input structure
 %
@@ -53,18 +55,28 @@ function [detval, phi, Amat, rhs, sflag] = rbrunforward(cfg, varargin)
 %           the non-zero terms for each node in the serialized vector
 %
 %     one can also pass on the cfg data structure used by mcxlab or mmclab
-%     to rbrunforward. If rbrunforward detects cfg.nphoton and
-%     cfg.node/cfg.elem in the input, it calls mmclab and run forward
-%     simulations on both the source (cfg.srcpos) and detectors
-%     (cfg.detpos); if it sees cfg.nphoton and cfg.vol, then, rbrunforward
-%     calls mcxlab to run the forward simulation. mcxlab/mmclab can not
-%     handle frequency-domain simulations
+%     to rbrunforward. When cfg.nphoton is set, rbrunforward routes to a
+%     Monte Carlo solver:
+%       - cfg.node + cfg.elem  -> mmclab (tetrahedral mesh-based MMC)
+%       - cfg.vol              -> mcxlab (voxel-grid MCX)
+%     For the mmclab path, requesting the 6th output (Jext) additionally
+%     computes the adjoint Jacobian via mmc's mesh-mode adjoint kernel
+%     (requires cfg.detdir; auto-sets cfg.outputtype='adjoint_mua_d',
+%     cfg.srcid=-1, cfg.basisorder=1). Forward-only calls (nargout<=5)
+%     run as outputtype='fluence' and skip the Jacobian.
+%     MWT/Helmholtz physics (cfg.helmholtz or cfg.bulkprop) is not
+%     supported via the MC path.
 %
 % output:
 %     detval: the values at the detector locations
 %     phi: the full volumetric forward solution computed at all wavelengths
 %     Amat: the left-hand-side matrices (a containers.Map object) at specified wavelengths
 %     rhs: the right-hand-side vectors for all sources (independent of wavelengths)
+%     sflag: solver flag (FEM solver), or 0 for the MC path
+%     Jext: optional 6th output. Empty for the FEM path. For the MC path,
+%           a struct with fields .mua (J_mua, [Nsd x Nn]) and .dcoeff (J_D,
+%           [Nsd x Nn]); both fields wrap a containers.Map(wavelength) for
+%           multi-spectral cfg.prop. Consumed by rbrunrecon to bypass rbjac.
 %     param/value pairs: (optional) additional parameters
 %          'solverflag': a cell array to be used as the optional parameters
 %               for rbfemsolve (starting from parameter 'method'), for
@@ -81,45 +93,166 @@ function [detval, phi, Amat, rhs, sflag] = rbrunforward(cfg, varargin)
 
 opt = varargin2struct(varargin{:});
 
+Jext = [];   % populated only by the MC path when nargout > 5
+
 if (isfield(cfg, 'nphoton'))
-    if (~isfield(cfg, 'tend'))
+    % MWT/Helmholtz is FEM-only physics
+    if ((isfield(cfg, 'helmholtz') && cfg.helmholtz) || isfield(cfg, 'bulkprop'))
+        error(['rbrunforward: MWT/Helmholtz forward (cfg.helmholtz / cfg.bulkprop) ' ...
+               'cannot be combined with the Monte Carlo path. Remove cfg.nphoton.']);
+    end
+
+    % default time grid: only fill what the user left unset
+    if (~isfield(cfg, 'tstart') || isempty(cfg.tstart))
+        cfg.tstart = 0;
+    end
+    if (~isfield(cfg, 'tend') || isempty(cfg.tend))
         cfg.tend = 5e-9;
     end
-    cfg.tstep = cfg.tend;
-    cfg.outputtype = 'fluence';
-    outdata = cell(1, nargout);
-    srcnum = size(cfg.srcpos, 1);
-    detnum = size(cfg.detpos, 1);
-    avgsize = jsonopt('avgsize', 1, opt);
-    detval = zeros(1, srcnum * detnum);
-    srcdetnum = srcnum + detnum;
-    if (nargout > 2)
-        Amat = cell(1, srcdetnum);
+    if (~isfield(cfg, 'tstep') || isempty(cfg.tstep))
+        cfg.tstep = cfg.tend;     % single-gate (CW) by default
     end
+
+    needJacobian = (nargout > 5);
+    avgsize = jsonopt('avgsize', 1, opt);
+    srcnum  = size(cfg.srcpos, 1);
+    detnum  = size(cfg.detpos, 1);
     if (size(cfg.detpos, 2) == 3)
         cfg.detpos(:, 4) = avgsize;
     end
+
     if (isfield(cfg, 'node') && isfield(cfg, 'elem'))
-        cfg.method = 'elem';
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %% mmclab path: tetrahedral mesh-based Monte Carlo
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        cfg.method     = 'elem';
+        cfg.basisorder = 1;       % nodal fluence: required for mesh adjoint
         if (isfield(cfg, 'seg') && ~isfield(cfg, 'elemprop'))
             cfg.elemprop = cfg.seg;
         end
-        srcpos = [cfg.srcpos(:, 1:3); cfg.detpos(:, 1:3)];
+
+        if (needJacobian)
+            % adjoint Jacobian path -> mmc returns J_mua and J_D
+            if (~isfield(cfg, 'detdir') || isempty(cfg.detdir))
+                error(['rbrunforward: MC adjoint Jacobian requires cfg.detdir ' ...
+                       '(Nd-by-4 inward detector normal + focal length).']);
+            end
+            if (size(cfg.detdir, 2) < 4)
+                cfg.detdir(:, 4) = 0;
+            end
+            if (isfield(cfg, 'omega') && cfg.omega > 0)
+                error(['rbrunforward: mmc mesh-mode adjoint Jacobian does not yet ' ...
+                       'support RF (cfg.omega > 0). Remove cfg.nphoton to use FEM.']);
+            end
+            cfg.srcid      = -1;
+            cfg.outputtype = 'adjoint_mua_d';   % dual output: J_mua + J_D
+        elseif (isfield(cfg, 'detdir') && ~isempty(cfg.detdir))
+            % forward only, but user provided detdir: simulate detectors as
+            % adjoint sources too (so phi has Ns+Nd slots) without computing J
+            if (size(cfg.detdir, 2) < 4)
+                cfg.detdir(:, 4) = 0;
+            end
+            cfg.srcid      = -2;
+            cfg.outputtype = 'fluence';
+        else
+            cfg.outputtype = 'fluence';
+        end
+
+        % wavelength iteration (mmclab is single-wavelength per call)
+        ismulti = isa(cfg.prop, 'containers.Map');
+        if (ismulti)
+            wavelengths = cfg.prop.keys;
+            propAll     = cfg.prop;
+            phi         = containers.Map();
+            detval      = containers.Map();
+            if (needJacobian)
+                JmuaMap = containers.Map();
+                JdMap   = containers.Map();
+            end
+        else
+            wavelengths = {''};
+        end
+
         [optodeloc, optodebary] = tsearchn(cfg.node(:, 1:3), cfg.elem(:, 1:4), cfg.detpos(:, 1:3));
-        phi = zeros(size(cfg.node, 1), srcdetnum);
-        for i = 1:srcdetnum
-            cfg.srcpos = srcpos(i, :);
-            [outdata{:}] = mmclab(cfg);
-            phi(:, i) = outdata{1}.data;
-            if (nargout > 2)
-                Amat{i} = outdata{2};
+
+        for waveid = wavelengths
+            wv = waveid{1};
+            if (ismulti)
+                cfg.prop = propAll(wv);
+            end
+
+            out = mmclab(cfg);
+
+            % flux.data shapes (after the dim-order fix in mmc):
+            %   multi-slot mesh (Ns+Nd):    [nn, maxgate, Ns+Nd]
+            %   pattern (srcnum>1):         [srcnum, nn, maxgate]
+            %   single source:              [nn, maxgate]
+            phiwv = squeeze(out.data);
+            if (ismatrix(phiwv) && size(phiwv, 1) ~= size(cfg.node, 1) && size(phiwv, 2) == size(cfg.node, 1))
+                phiwv = phiwv.';  % defensive: ensure first dim is nn
+            end
+
+            % compute detphi by interpolating forward-source fluence at detector positions
+            phisrc = phiwv(:, 1:min(srcnum, size(phiwv, 2)));
+            detphiwv = nan(detnum, srcnum);
+            for d = 1:detnum
+                if (~isnan(optodeloc(d)))
+                    nodes_d = cfg.elem(optodeloc(d), 1:4);
+                    for s = 1:size(phisrc, 2)
+                        detphiwv(d, s) = optodebary(d, :) * phisrc(nodes_d, s);
+                    end
+                end
+            end
+
+            if (needJacobian)
+                % mmc returns jmua/jd as single-precision [nn, Ns*Nd];
+                % redbird convention is double [Nsd, nn].
+                Jmua_wv = double(out.jmua).';
+                Jd_wv   = double(out.jd).';
+            end
+
+            if (ismulti)
+                phi(wv)    = phiwv;
+                detval(wv) = detphiwv;
+                if (needJacobian)
+                    JmuaMap(wv) = Jmua_wv;
+                    JdMap(wv)   = Jd_wv;
+                end
+            else
+                phi    = phiwv;
+                detval = detphiwv;
+                if (needJacobian)
+                    Jext = struct('mua', Jmua_wv, 'dcoeff', Jd_wv);
+                end
             end
         end
-        detval = sum(phi(cfg.elem(optodeloc, 1:4)) .* optodebary, 2);
+
+        if (ismulti)
+            cfg.prop = propAll;
+            if (needJacobian)
+                Jext = struct('mua', JmuaMap, 'dcoeff', JdMap);
+            end
+        end
+
+        if (nargout > 2)
+            Amat  = [];
+        end
+        if (nargout > 3)
+            rhs   = [];
+        end
+        if (nargout > 4)
+            sflag = 0;
+        end
+
     elseif (isfield(cfg, 'vol'))
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %% mcxlab path: voxel-grid Monte Carlo
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         cfg.srcid = -1;
+        outdata   = cell(1, max(nargout, 1));
         [outdata{:}] = mcxlab(cfg);
         phi = squeeze(outdata{1}.data);
+        detval = zeros(1, srcnum * detnum);
         for i = 1:size(phi, 4)
             detval(((i - 1) * detnum + 1):i * detnum) = rbvoxelmean(phi(:, :, :, i), cfg.detpos(:, 1:3), avgsize);
         end
@@ -133,7 +266,7 @@ if (isfield(cfg, 'nphoton'))
             end
         end
     else
-        error('input cfg is not supported by redbird, mcxlab and mmclab');
+        error('rbrunforward: cfg.nphoton requires either cfg.node+cfg.elem (mmclab) or cfg.vol (mcxlab)');
     end
     return
 end

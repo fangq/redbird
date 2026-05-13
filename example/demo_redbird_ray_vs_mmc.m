@@ -146,7 +146,7 @@ cfgM.tend     = 5e-9;
 cfgM.tstep    = 5e-9;                      % single CW gate
 cfgM.isreflect = 0;                        % matched-index domain (n_out = n)
 cfgM.method   = 'elem';
-%cfgM.gpuid = 2;
+% cfgM.gpuid = 2;
 cfgM.debuglevel = 'TP';
 cfgM.seed     = 1648335518;
 

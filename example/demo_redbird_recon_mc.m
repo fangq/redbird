@@ -7,6 +7,11 @@
 % mmclab. The mesh-mode adjoint Jacobian returned by mmclab is consumed
 % by rbrunrecon directly, bypassing rbjac.
 %
+% This is the third demo in the mmclab-integration trio:
+%   demo_redbird_forward_mc.m   - forward simulation via mmclab
+%   demo_redbird_jacobian_mc.m  - mesh-mode adjoint Jacobian via mmclab
+%   demo_redbird_recon_mc.m     - this demo (CW DOT reconstruction)
+%
 % Requires: mmclab on the MATLAB path, built against an mmc tree that
 % includes PR#1+PR#2+PR#3 (mesh adjoint + per-node prop). Photon counts
 % of order 1e7 keep the per-iteration Monte Carlo noise small enough that

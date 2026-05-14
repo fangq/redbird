@@ -145,10 +145,6 @@ if (isfield(cfg, 'nphoton'))
             if (size(cfg.detdir, 2) < 4)
                 cfg.detdir(:, 4) = 0;
             end
-            if (isfield(cfg, 'omega') && cfg.omega > 0)
-                error(['rbrunforward: mmc mesh-mode adjoint Jacobian does not yet ' ...
-                       'support RF (cfg.omega > 0). Remove cfg.nphoton to use FEM.']);
-            end
             cfg.srcid      = -1;
             cfg.outputtype = 'adjoint_mua_d';   % dual output: J_mua + J_D
         elseif (isfield(cfg, 'detdir') && ~isempty(cfg.detdir))
@@ -180,12 +176,12 @@ if (isfield(cfg, 'nphoton'))
 
         [optodeloc, optodebary] = tsearchn(cfg.node(:, 1:3), cfg.elem(:, 1:4), cfg.detpos(:, 1:3));
 
-        % Save the original multi-source cfg.srcpos / cfg.srcdir so the
-        % per-source mmclab loop below can rotate one source at a time.
-        % (mmclab takes cfg.srcpos as a single float4; multi-source redbird
-        % configurations must be looped on the host side.)
-        srcposAll = cfg.srcpos;
-        srcdirAll = cfg.srcdir;
+        % Broadcast srcdir to Nsrc rows if user passed a single row -- the
+        % batched mmclab call expects matching row counts between srcpos
+        % and srcdir for the multi-source srcpos parser (mmc 461b1ed+).
+        if (size(cfg.srcdir, 1) == 1 && srcnum > 1)
+            cfg.srcdir = repmat(cfg.srcdir, srcnum, 1);
+        end
 
         for waveid = wavelengths
             wv = waveid{1};
@@ -217,62 +213,38 @@ if (isfield(cfg, 'nphoton'))
                 cfg.elemprop = ones(size(cfg.elem, 1), 1);
             end
 
-            phiwv    = zeros(size(cfg.node, 1), srcnum + detnum);
+            % mmclab's multi-source srcpos parser will rebuild cfg.srcdata
+            % from the Nsrc rows of cfg.srcpos at field-iteration time.
+            if (isfield(cfg, 'srcdata'))
+                cfg = rmfield(cfg, 'srcdata');
+            end
+
+            out = mmclab(cfg);
+
+            % Single batched call: mmclab built srcdata with Ns forward slots
+            % from the Nsrc rows of cfg.srcpos and (when detdir is set) appended
+            % Nd detector-as-adjoint slots. flux.data is [nn, maxgate, Ns+Nd];
+            % squeeze drops the singleton maxgate axis.
+            phiwv = squeeze(out.data);
+            if (~isvector(phiwv) && size(phiwv, 1) ~= size(cfg.node, 1) && size(phiwv, 2) == size(cfg.node, 1))
+                phiwv = phiwv.';
+            end
+
+            % detphi[d, s] = forward fluence from source s evaluated at detector d
             detphiwv = nan(detnum, srcnum);
+            for d = 1:detnum
+                if (~isnan(optodeloc(d)))
+                    nodes_d = cfg.elem(optodeloc(d), 1:4);
+                    detphiwv(d, :) = optodebary(d, :) * phiwv(nodes_d, 1:srcnum);
+                end
+            end
+
             if (needJacobian)
-                Jmua_wv = zeros(srcnum * detnum, size(cfg.node, 1));
-                Jd_wv   = zeros(srcnum * detnum, size(cfg.node, 1));
+                % out.jmua and out.jd are [nn, Ns*Nd] single (complex when RF);
+                % transpose into rbjac's [Nsd x Nn] convention.
+                Jmua_wv = double(out.jmua).';
+                Jd_wv   = double(out.jd).';
             end
-
-            for s = 1:srcnum
-                cfg.srcpos = srcposAll(s, :);
-                if (size(srcdirAll, 1) > 1)
-                    cfg.srcdir = srcdirAll(s, :);
-                else
-                    cfg.srcdir = srcdirAll;
-                end
-                cfg.srcdata = [];   % force mmclab to (re)build srcdata for this single source
-
-                out = mmclab(cfg);
-                if (needJacobian && ~isfield(out, 'jmua'))
-                    fprintf(2, '[diag] s=%d: out fields = %s; outputtype=%s; size(detpos)=[%d,%d]; size(detdir)=[%d,%d]\n', ...
-                            s, strjoin(fieldnames(out), ','), cfg.outputtype, ...
-                            size(cfg.detpos, 1), size(cfg.detpos, 2), ...
-                            size(cfg.detdir, 1), size(cfg.detdir, 2));
-                end
-
-                % flux.data shape this call: [nn, maxgate, 1+Nd] for multi-slot;
-                % squeeze to drop maxgate=1 -> [nn, 1+Nd].
-                phisingle = squeeze(out.data);
-                if (~isvector(phisingle) && size(phisingle, 1) ~= size(cfg.node, 1) && size(phisingle, 2) == size(cfg.node, 1))
-                    phisingle = phisingle.';
-                end
-
-                % forward-source fluence (slot 0) and detector-as-adjoint-source fluences (slots 1..Nd)
-                phiwv(:, s) = phisingle(:, 1);
-                phiwv(:, srcnum + 1:end) = phiwv(:, srcnum + 1:end) + phisingle(:, 2:end) / srcnum;
-
-                % detphi at each detector position from this source
-                for d = 1:detnum
-                    if (~isnan(optodeloc(d)))
-                        nodes_d = cfg.elem(optodeloc(d), 1:4);
-                        detphiwv(d, s) = optodebary(d, :) * phisingle(nodes_d, 1);
-                    end
-                end
-
-                if (needJacobian)
-                    % out.jmua is [nn, 1*Nd] this call; map into rows (s-1)*Nd+1..s*Nd
-                    jmua_s = double(out.jmua).';     % [Nd, nn]
-                    jd_s   = double(out.jd).';
-                    rowidx = (s - 1) * detnum + 1:s * detnum;
-                    Jmua_wv(rowidx, :) = jmua_s;
-                    Jd_wv(rowidx, :)   = jd_s;
-                end
-            end
-
-            % restore multi-source cfg fields for any downstream caller
-            cfg.srcpos = srcposAll;
-            cfg.srcdir = srcdirAll;
 
             if (ismulti)
                 phi(wv)    = phiwv;

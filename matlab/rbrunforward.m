@@ -74,9 +74,16 @@ function [detval, phi, Amat, rhs, sflag, Jext] = rbrunforward(cfg, varargin)
 %     rhs: the right-hand-side vectors for all sources (independent of wavelengths)
 %     sflag: solver flag (FEM solver), or 0 for the MC path
 %     Jext: optional 6th output. Empty for the FEM path. For the MC path,
-%           a struct with fields .mua (J_mua, [Nsd x Nn]) and .dcoeff (J_D,
-%           [Nsd x Nn]); both fields wrap a containers.Map(wavelength) for
-%           multi-spectral cfg.prop. Consumed by rbrunrecon to bypass rbjac.
+%           a struct with fields .mua (J_mua) and .dcoeff (J_D) whose
+%           shape depends on the MC backend:
+%             - mmclab path: [Nsd x Nn] mesh-node Jacobian (rbjac convention),
+%               wrapped in containers.Map(wavelength) for multi-spectral.
+%             - mcxlab path: [Nx x Ny x Nz x (Ns*Nd)] voxel-grid Jacobian
+%               (mcxlab raw orientation; one 3D sensitivity volume per
+%               source-detector pair). Single-wavelength only on this path.
+%           Consumed by rbrunrecon: the mmclab/mesh form bypasses rbjac
+%           directly; the mcxlab/grid form routes to rbreglsqr (matrix-free
+%           LSQR) instead of the normal-equation rbreginv.
 %     param/value pairs: (optional) additional parameters
 %          'solverflag': a cell array to be used as the optional parameters
 %               for rbfemsolve (starting from parameter 'method'), for
@@ -283,22 +290,67 @@ if (isfield(cfg, 'nphoton'))
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %% mcxlab path: voxel-grid Monte Carlo
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        cfg.srcid = -1;
-        outdata   = cell(1, max(nargout, 1));
-        [outdata{:}] = mcxlab(cfg);
-        phi = squeeze(outdata{1}.data);
-        detval = zeros(1, srcnum * detnum);
-        for i = 1:size(phi, 4)
-            detval(((i - 1) * detnum + 1):i * detnum) = rbvoxelmean(phi(:, :, :, i), cfg.detpos(:, 1:3), avgsize);
-        end
-        if (nargout > 2)
-            Amat = outdata{3};
-            if (nargout > 3)
-                rhs = outdata{4};
-                if (nargout > 4)
-                    sflag = outdata{5};
+
+        if (needJacobian)
+            % adjoint Jacobian path -> mcxlab returns J_mua and J_D as
+            % (Nx,Ny,Nz,Ns*Nd) 4D arrays. Voxel J is too large for the
+            % normal-equation form; rbrunrecon will route through
+            % rbreglsqr (matrix-free LSQR) downstream.
+            if (~isfield(cfg, 'detdir') || isempty(cfg.detdir))
+                if (jsonopt('autodetdir', 1, opt))
+                    cfg.detdir = rbgetdetdir_vol(cfg);
+                    fprintf(1, '[rbrunforward] cfg.detdir auto-filled via rbgetdetdir_vol (%d detectors)\n', size(cfg.detdir, 1));
+                else
+                    error(['rbrunforward: MC adjoint Jacobian requires cfg.detdir ' ...
+                           '(Nd-by-4 inward detector normal + focal length).']);
                 end
             end
+            if (size(cfg.detdir, 2) < 4)
+                cfg.detdir(:, 4) = 0;
+            end
+            cfg.srcid      = -1;
+            cfg.outputtype = 'adjoint_mua_d';
+        elseif (isfield(cfg, 'detdir') && ~isempty(cfg.detdir))
+            % forward only, but user provided detdir: simulate detectors as
+            % adjoint sources too (phi gets Ns+Nd slots) without computing J
+            if (size(cfg.detdir, 2) < 4)
+                cfg.detdir(:, 4) = 0;
+            end
+            cfg.srcid      = -2;
+            cfg.outputtype = 'fluence';
+        else
+            cfg.srcid      = -1;
+            cfg.outputtype = 'fluence';
+        end
+
+        out = mcxlab(cfg);
+        phi = squeeze(out.data);
+
+        % detphi[d, s] : average forward fluence at detector d for source s.
+        % phi is (Nx,Ny,Nz,Ns+Nd) when detdir is set, else (Nx,Ny,Nz,Ns).
+        detphi = nan(detnum, srcnum);
+        for s = 1:srcnum
+            detphi(:, s) = rbvoxelmean(phi(:, :, :, s), cfg.detpos(:, 1:3), avgsize);
+        end
+        detval = detphi;
+
+        if (needJacobian)
+            % out.jmua and out.jd are 4D voxel Jacobians of shape
+            % (Nx,Ny,Nz,Ns*Nd) -- one volume per source-detector pair.
+            Jext = struct('mua',    double(out.jmua));
+            if (isfield(out, 'jd'))
+                Jext.dcoeff = double(out.jd);
+            end
+        end
+
+        if (nargout > 2)
+            Amat = [];
+        end
+        if (nargout > 3)
+            rhs = [];
+        end
+        if (nargout > 4)
+            sflag = 0;
         end
     else
         error('rbrunforward: cfg.nphoton requires either cfg.node+cfg.elem (mmclab) or cfg.vol (mcxlab)');

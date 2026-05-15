@@ -227,6 +227,43 @@ for iter = 1:maxiter
         omegas = 0;
     end
 
+    % ---- voxel-grid (mcxlab) Jacobian: route through LSQR -------------
+    %
+    % When rbrunforward's mcxlab branch returned Jext.mua as a 4D array
+    % (Nx, Ny, Nz, Ns*Nd), the Jacobian is too large for the normal-
+    % equation form (J'*J is Nv x Nv).  Use rbreglsqr (matrix-free LSQR
+    % with early stopping) to solve J*delta_mu = (detphi0 - detphi)
+    % directly and write the voxel update back to cfg.muavol (or
+    % cfg.prop, depending on the user's parameterization).
+    if (~isempty(Jext) && isstruct(Jext) && isfield(Jext, 'mua') && ...
+        isnumeric(Jext.mua) && ndims(Jext.mua) >= 4)
+
+        rvec = detphi0(:) - detphi(:);
+        lsqr_maxit = jsonopt('lsqrmaxit', 100, opt);
+        lsqr_tol   = jsonopt('lsqrtol',   1e-6, opt);
+        [delta_mu_vol, lsqr_info] = rbreglsqr(Jext.mua, rvec, ...
+                                              'maxit', lsqr_maxit, 'tol', lsqr_tol);
+
+        updates(iter).mua = delta_mu_vol;
+        if (isfield(cfg, 'muavol') && isequal(size(cfg.muavol), size(delta_mu_vol)))
+            cfg.muavol = cfg.muavol + delta_mu_vol;
+        elseif (size(cfg.prop, 1) == 2)   % single tissue label + outside
+            cfg.muavol = delta_mu_vol;     % user must consume cfg.muavol downstream
+        else
+            % degenerate: just stash the update for the user
+            cfg.delta_muavol = delta_mu_vol;
+        end
+
+        resid(iter) = norm(rvec);
+        if (doreport)
+            fprintf(1, ['iter [%4d] (mcxlab/LSQR): residual=%e ' ...
+                        'relres=%e lsqr_iter=%d (time=%fs)\n'], ...
+                    iter, resid(iter), lsqr_info.relres, ...
+                    lsqr_info.iter, toc);
+        end
+        continue
+    end
+
     if (~isempty(Jext) && isstruct(Jext) && isfield(Jext, 'mua'))
         % mmc Monte Carlo forward solver returned the Jacobian alongside
         % phi; reuse it directly and skip rbjac/rbjacmex. Jext.mua and

@@ -51,16 +51,20 @@ Nz = 30;
 cfg.vol  = uint8(ones(Nx, Ny, Nz));      % single tissue label
 cfg.unitinmm = 1.0;
 
-% three sources along the +x face of the slab (z = 0)
-cfg.srcpos = [20 30 0; 30 30 0; 40 30 0];
-cfg.srcdir = [0  0  1];
+% 5 x 5 = 25 sources, 5 x 5 = 25 detectors co-located on a regular 10-mm
+% grid spanning x,y in {10, 20, 30, 40, 50} on the +z face (z = 0).
+% Each pair (source k, detector k) is collocated; pairs across grid points
+% sample different src-det separations across the slab.  25 sources x 25
+% detectors = 625 measurements -- significantly enlarges the LSQR row-
+% space compared to the original 12-pair geometry, which is the standard
+% way to lift the min-norm amplitude attenuation in underdetermined DOT.
+[Sx, Sy] = meshgrid(10:10:50);
+[Dx, Dy] = meshgrid(10:10:50);
+cfg.srcpos  = [Sx(:), Sy(:), zeros(numel(Sx), 1)];
+cfg.srcdir  = repmat([0 0 1], numel(Sx), 1);
 cfg.srctype = 'pencil';
 
-% four detectors at increasing s-d separation, same surface
-cfg.detpos = [15 30 0 1.5
-              25 30 0 1.5
-              35 30 0 1.5
-              45 30 0 1.5];
+cfg.detpos = [Dx(:), Dy(:), zeros(numel(Dx), 1), 1.5 * ones(numel(Dx), 1)];
 
 cfg.prop = [0 0 1 1
             0.005 1 0 1.37];
@@ -80,7 +84,9 @@ Ndet = size(cfg.detpos, 1);
 %%   Baseline forward + adjoint Jacobian
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-cfg.nphoton = 5e7;
+% 25 sources + 25 detectors -> 50 ExtraSrc adjoint slots; bump photon count
+% so each slot still gets ~4e6 photons after mcx's uniform per-slot split.
+cfg.nphoton = 2e8;
 
 fprintf('mcxlab adjoint (%.0e photons) ...\n', cfg.nphoton);
 tic;
@@ -94,6 +100,12 @@ if (isfield(Jext, 'dcoeff'))
     fprintf('  Jext.dcoeff  : %s\n',                        mat2str(size(Jext.dcoeff)));
 end
 
+% Diagnostic: print magnitudes so we can compare with demo_redbird_recon_mcx_iter.m.
+fprintf('  detphi  : min=%.3e  max=%.3e  ||.||=%.3e\n', ...
+        min(detphi(:)), max(detphi(:)), norm(detphi(:)));
+fprintf('  Jext.mua: min=%.3e  max=%.3e  ||.||=%.3e\n', ...
+        min(Jext.mua(:)), max(Jext.mua(:)), norm(Jext.mua(:)));
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%   Synthesize a "measurement" by perturbing one voxel
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -105,8 +117,8 @@ end
 % truncation).
 
 delta_mu_true = zeros(Nx, Ny, Nz);
-delta_mu_true(10:15, 28:32, 14:16) = 0.005;
-delta_mu_true(28:32, 38:42, 14:16) = 0.008;
+delta_mu_true(10:21, 28:37, 14:19) = 0.005;
+delta_mu_true(28:37, 38:47, 14:19) = 0.008;
 
 % J has shape (Nx, Ny, Nz, Ns*Nd); reshape to 2D for one matvec
 J2 = reshape(double(Jext.mua), Nx * Ny * Nz, Nsrc * Ndet);
@@ -118,11 +130,16 @@ y_meas = detphi(:) + J2.' * delta_mu_true(:);   % linearized "measurement"
 
 r = y_meas - detphi(:);                  % residual (Ns*Nd vector)
 
+fprintf('  ||r|| = ||J^T delta_mu_true|| = %.3e   ||r||/||y_meas|| = %.3e\n', ...
+        norm(r), norm(r) / norm(y_meas));
+
 fprintf('\nrbreglsqr ...\n');
 tic;
 [delta_mu_rec, info] = rbreglsqr(Jext.mua, r, 'maxit', 100, 'tol', 1e-8);
 fprintf('  done in %.2f s   LSQR iters: %d   relres: %.3e   adjoint err: %.2e\n', ...
         toc, info.iter, info.relres, info.adjoint_err);
+fprintf('  recovered: ||delta_mu_rec||=%.3e   max=%.3e   min=%.3e\n', ...
+        norm(delta_mu_rec(:)), max(delta_mu_rec(:)), min(delta_mu_rec(:)));
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%   Compare reconstruction to ground truth

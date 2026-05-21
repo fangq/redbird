@@ -45,7 +45,10 @@ cfg0.srcdir = [0 0 1];
 
 [xi, yi] = meshgrid(60:20:140, 20:20:100);
 cfg0.srcpos = [xi(:), yi(:), zeros(numel(yi), 1)];
-cfg0.detpos = [xi(:), yi(:), 60 * ones(numel(yi), 1)];
+% Push detectors slightly inside the mesh (z=60 - epsilon) so mmclab's
+% tsearchn-based detector localization returns a valid element index
+% rather than NaN.  Critical for the mmc forward / adjoint path.
+cfg0.detpos = [xi(:), yi(:), 59.999 * ones(numel(yi), 1)];
 cfg0.detdir = [0 0 -1];
 
 cfg0.prop = [
@@ -76,7 +79,8 @@ cfg = rbsetmesh(cfg, node, elem, cfg.prop, ones(size(node, 1), 1));
 
 % MC path: route cfg.nphoton through to mmclab. detdir is auto-filled
 % from the surface mesh by rbrunforward via rbgetdetdir if absent.
-cfg.nphoton = 1e7;
+cfg.nphoton = 4e8;
+cfg.gpuid = '11';
 cfg = rmfield(cfg, 'detdir');   % let rbgetdetdir compute inward normals
 
 sd = rbsdmap(cfg);
@@ -86,21 +90,39 @@ sd = rbsdmap(cfg);
 [recon.mapid, recon.mapweight]  = tsearchn(recon.node, recon.elem, cfg.node);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%   Streamlined MC-based reconstruction
+%%   Stage 1: bulk mua/musp fit (single segment)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% Start from a deliberately poor initial guess. rbrun mode='bulk' sets
+% recon.seg = ones(size(recon.node)), collapsing the Jacobian columns into
+% a single per-segment unknown via rbmasksum. Each Gauss-Newton step then
+% adjusts one global mua (and musp), giving a fast sanity check on the
+% MC forward + adjoint pipeline before per-node imaging starts.
 
-% initialize to homogeneous background
-recon.prop = cfg.prop(ones(size(recon.node, 1), 1) + 1, :);
-cfg.prop   = cfg.prop(ones(size(cfg.node, 1), 1) + 1, :);   % per-node prop
-cfg        = rmfield(cfg, 'seg');
+recon.bulk = struct('mua', 0.003, 'musp', 0.6);
 
-% Per-node cfg.prop is auto-detected by rbrunforward and split into
-% cfg.nodemua (and cfg.nodemusp for RF) for the mmc kernel's per-node
-% global-memory path. Reconstruction loop is unchanged from FEM mode -
-% rbrunrecon picks up the Jacobian from rbrunforward's 6th output (Jext)
-% and skips the rbjac call.
+fprintf('=== Stage 1: bulk mua/musp fit ===\n');
+newrecon = rbrun(cfg, recon, detphi0, sd, 'mode', 'bulk', 'lambda', 1e-3, 'maxiter', 5);
+fprintf('Bulk fit result: mua = %g  musp = %g\n', newrecon.prop(2, 1), newrecon.prop(2, 2));
 
-[newrecon, resid, newcfg] = rbrun(cfg, recon, detphi0, sd, 'mex', 0, 'lambda', 1e-4, 'maxiter', 5);
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%   Stage 2: per-node image recon seeded with stage-1 bulk
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% Re-seed recon.bulk from the stage-1 fit and let rbrun mode='image' rebuild
+% per-node recon.prop (size(recon.node) x 4) and cfg.prop (size(cfg.node) x 4)
+% from those bulk values. Per-node cfg.prop is auto-detected by rbrunforward
+% and split into cfg.nodemua/cfg.nodemusp for the mmc kernel's per-node
+% global-memory path; rbrunrecon picks up the Jacobian from rbrunforward's
+% 6th output (Jext) and skips the rbjac call.
+
+recon.bulk = struct('mua', newrecon.prop(2, 1), 'musp', newrecon.prop(2, 2));
+if (isfield(recon, 'prop'))
+    recon = rmfield(recon, 'prop');   % let rbrun rebuild per-node from new bulk
+end
+
+fprintf('=== Stage 2: per-node image reconstruction ===\n');
+[newrecon, resid, newcfg] = rbrun(cfg, recon, detphi0, sd, 'mode', 'image', 'mex', 0, 'lambda', 1e-4, 'maxiter', 5);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%  Plot reconstructed mua slices

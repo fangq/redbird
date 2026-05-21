@@ -269,8 +269,12 @@ for iter = 1:maxiter
         % phi; reuse it directly and skip rbjac/rbjacmex. Jext.mua and
         % Jext.dcoeff are already in the [Nsd x Nn] convention (double
         % precision, containers.Map keyed by wavelength for multi-spectral).
+        % Only include Jd when running RF (omega>0 in mode 1) so the CW
+        % path solves for mua alone -- mua and D are inseparable from CW
+        % data and the FEM branch below applies the same guard.
         Jmua = Jext.mua;
-        if (isfield(Jext, 'dcoeff') && ~isempty(Jext.dcoeff))
+        is_rf_recon = isfield(cfg, 'omega') && (any(omegas > 0)) && ismember(1, rfcw);
+        if (is_rf_recon && isfield(Jext, 'dcoeff') && ~isempty(Jext.dcoeff))
             Jd = Jext.dcoeff;
         end
     elseif (isfield(cfg, 'omega') && (any(omegas > 0)) && ismember(1, rfcw)) % if RF data

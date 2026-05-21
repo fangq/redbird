@@ -105,7 +105,8 @@ end
 % truncation).
 
 delta_mu_true = zeros(Nx, Ny, Nz);
-delta_mu_true(28:32, 28:32, 14:16) = 0.005;
+delta_mu_true(10:15, 28:32, 14:16) = 0.005;
+delta_mu_true(28:32, 38:42, 14:16) = 0.008;
 
 % J has shape (Nx, Ny, Nz, Ns*Nd); reshape to 2D for one matvec
 J2 = reshape(double(Jext.mua), Nx * Ny * Nz, Nsrc * Ndet);

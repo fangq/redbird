@@ -37,10 +37,15 @@ else
 end
 
 if (isfield(cfg, 'srcpos') && ~isempty(cfg.srcpos))
+    % Use cfg.srcpos(:,1:3) and cfg.srcdir(:,1:3) (column slices) -- the older
+    % cfg.srcpos(1:3) / cfg.srcdir(1:3) forms only worked for a single 1x3
+    % source row; for Nsrc-by-3 inputs single-subscripting collapses the matrix
+    % in column-major order and silently colocates every source at one wrong
+    % position (e.g., (srcpos(1,1), srcpos(2,1), srcpos(3,1))).
     if (size(cfg.srcdir, 1) == size(cfg.srcpos, 1))
-        pointsrc = cfg.srcpos + (cfg.srcdir .* ltr);
+        pointsrc = cfg.srcpos(:, 1:3) + (cfg.srcdir(:, 1:3) .* ltr);
     elseif (size(cfg.srcdir, 1) == 1)
-        pointsrc = cfg.srcpos + repmat(cfg.srcdir .* ltr, size(cfg.srcpos, 1), 1);
+        pointsrc = cfg.srcpos(:, 1:3) + repmat(cfg.srcdir(:, 1:3) .* ltr, size(cfg.srcpos, 1), 1);
     else
         error('Please provide either one srcdir for all srcpos or one srcdir for each srcpos');
     end

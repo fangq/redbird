@@ -135,11 +135,25 @@ if (isfield(cfg, 'nphoton'))
         cfg.method     = 'elem';
         cfg.basisorder = 1;       % nodal fluence: required for mesh adjoint
         if (isfield(cfg, 'seg') && ~isfield(cfg, 'elemprop'))
-            cfg.elemprop = cfg.seg;
+            if (numel(cfg.seg) == size(cfg.elem, 1))
+                cfg.elemprop = cfg.seg;     % per-element seg: use directly
+            else
+                % per-node seg (or wrong-size).  mmclab.cpp computes
+                % mesh.ne = numel(cfg.elemprop), which would corrupt
+                % the element count if we pass per-node data here.
+                % Fall back to a single per-element tissue label; the
+                % per-node DOT property mode below will then route the
+                % per-node mua/musp via cfg.nodemua / cfg.nodemusp.
+                cfg.elemprop = ones(size(cfg.elem, 1), 1);
+            end
         end
 
         if (needJacobian)
-            % adjoint Jacobian path -> mmc returns J_mua and J_D
+            % adjoint Jacobian path -> mmc returns J_mua (and J_D if RF).
+            % CW data (cfg.omega == 0) cannot separate mua and D, so use the
+            % single-output 'adjoint' kernel; RF (omega>0) uses 'adjoint_mua_d'
+            % to also get J_D. Mirrors the FEM/rbjac branch which only computes
+            % Jd when (any(omegas) > 0).
             if (~isfield(cfg, 'detdir') || isempty(cfg.detdir))
                 if (jsonopt('autodetdir', 1, opt))
                     cfg.detdir = rbgetdetdir(cfg);
@@ -152,8 +166,22 @@ if (isfield(cfg, 'nphoton'))
             if (size(cfg.detdir, 2) < 4)
                 cfg.detdir(:, 4) = 0;
             end
+
+            if (isa(cfg.omega, 'containers.Map'))
+                omegas_local = cell2mat(cfg.omega.values);
+            elseif (isfield(cfg, 'omega'))
+                omegas_local = cfg.omega;
+            else
+                omegas_local = 0;
+            end
+            is_rf_mc = any(omegas_local > 0);
+
             cfg.srcid      = -1;
-            cfg.outputtype = 'adjoint_mua_d';   % dual output: J_mua + J_D
+            if (is_rf_mc)
+                cfg.outputtype = 'adjoint_mua_d';   % dual output: J_mua + J_D
+            else
+                cfg.outputtype = 'adjoint';         % CW: J_mua only
+            end
         elseif (isfield(cfg, 'detdir') && ~isempty(cfg.detdir))
             % forward only, but user provided detdir: simulate detectors as
             % adjoint sources too (so phi has Ns+Nd slots) without computing J
@@ -188,6 +216,16 @@ if (isfield(cfg, 'nphoton'))
         % and srcdir for the multi-source srcpos parser (mmc 461b1ed+).
         if (size(cfg.srcdir, 1) == 1 && srcnum > 1)
             cfg.srcdir = repmat(cfg.srcdir, srcnum, 1);
+        end
+
+        % mmclab.cpp populates cfg->srcdata via calloc (zero-initialized)
+        % then copies arraydim[1] columns from cfg.srcpos.  With only 3
+        % columns the per-photon weight srcdata.srcpos.w stays at 0 and
+        % every photon launches with zero weight ("total simulated
+        % energy: 0.00").  Fill the missing 4th column with weight = 1
+        % so multi-source MC runs actually carry energy.
+        if (size(cfg.srcpos, 2) < 4)
+            cfg.srcpos(:, 4) = 1;
         end
 
         for waveid = wavelengths
@@ -226,6 +264,10 @@ if (isfield(cfg, 'nphoton'))
                 cfg = rmfield(cfg, 'srcdata');
             end
 
+            if (~isfield(cfg, 'flog'))
+                cfg.flog = 0;
+            end
+
             out = mmclab(cfg);
 
             % Single batched call: mmclab built srcdata with Ns forward slots
@@ -248,9 +290,14 @@ if (isfield(cfg, 'nphoton'))
 
             if (needJacobian)
                 % out.jmua and out.jd are [nn, Ns*Nd] single (complex when RF);
-                % transpose into rbjac's [Nsd x Nn] convention.
+                % transpose into rbjac's [Nsd x Nn] convention. CW mode runs
+                % outputtype='adjoint' which only produces J_mua (no out.jd).
                 Jmua_wv = double(out.jmua).';
-                Jd_wv   = double(out.jd).';
+                if (isfield(out, 'jd') && ~isempty(out.jd))
+                    Jd_wv = double(out.jd).';
+                else
+                    Jd_wv = [];
+                end
             end
 
             if (ismulti)
@@ -291,11 +338,24 @@ if (isfield(cfg, 'nphoton'))
         %% mcxlab path: voxel-grid Monte Carlo
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+        % Broadcast cfg.srcdir to Nsrc rows if user passed a single row.
+        % mcxlab's multi-source srcpos parser requires matching row counts
+        % between srcpos and srcdir (same convention as mmclab).
+        if (size(cfg.srcpos, 1) > 1 && size(cfg.srcdir, 1) == 1)
+            cfg.srcdir = repmat(cfg.srcdir, size(cfg.srcpos, 1), 1);
+        end
+
         if (needJacobian)
-            % adjoint Jacobian path -> mcxlab returns J_mua and J_D as
-            % (Nx,Ny,Nz,Ns*Nd) 4D arrays. Voxel J is too large for the
+            % adjoint Jacobian path -> mcxlab returns J_mua as a
+            % (Nx,Ny,Nz,Ns*Nd) 4D array.  Voxel J is too large for the
             % normal-equation form; rbrunrecon will route through
             % rbreglsqr (matrix-free LSQR) downstream.
+            %
+            % outputtype='adjoint' computes ONLY J_mua (mcx applies its
+            % native -Vvox scaling and exposes the result in out.jmua).
+            % 'adjoint_mua_d' would additionally run the J_D kernel in
+            % the same session, which we do not use for mua-only
+            % reconstruction.
             if (~isfield(cfg, 'detdir') || isempty(cfg.detdir))
                 if (jsonopt('autodetdir', 1, opt))
                     cfg.detdir = rbgetdetdir_vol(cfg);
@@ -309,7 +369,7 @@ if (isfield(cfg, 'nphoton'))
                 cfg.detdir(:, 4) = 0;
             end
             cfg.srcid      = -1;
-            cfg.outputtype = 'adjoint_mua_d';
+            cfg.outputtype = 'adjoint';
         elseif (isfield(cfg, 'detdir') && ~isempty(cfg.detdir))
             % forward only, but user provided detdir: simulate detectors as
             % adjoint sources too (phi gets Ns+Nd slots) without computing J

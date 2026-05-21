@@ -43,6 +43,15 @@ if (~isfield(cfg, 'vol') || ~isfield(cfg, 'detpos'))
 end
 
 vol = cfg.vol;
+
+% mcxlab's per-voxel-property modes (cfg.mediabyte > 100, e.g.
+% MEDIA_MUA_FLOAT) pass cfg.vol as a 4D array (Nprop, Nx, Ny, Nz) where
+% the first axis is the property channel.  For the indicator-based
+% inward-normal estimate below we only need a 3D mask of inside-the-
+% domain voxels; collapse the property axis.
+if (ndims(vol) == 4)
+    vol = squeeze(any(vol > 0, 1));
+end
 detpos = cfg.detpos;
 unitinmm = 1.0;
 if (isfield(cfg, 'unitinmm') && ~isempty(cfg.unitinmm))

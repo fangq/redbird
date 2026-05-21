@@ -123,7 +123,11 @@ title('Redbird solution');
 clines = 0:-0.5:-5;
 [xi, yi] = meshgrid(0.5:59.5, 0.5:29.5);
 [cutpos, cutvalue, facedata] = qmeshcut(cfg.elem, cfg.node, phi(:, 1), 'x=29.5');
-vphi = griddata(cutpos(:, 2), cutpos(:, 3), cutvalue, xi + 0.5, yi + 0.5);
+% Match demo_redbird_vs_mcx_pencil.m: shift in y (xi+0.5) so the FEM
+% interpolation lands on MCX's voxel-center positions there, but do NOT shift
+% z (yi unchanged) -- that z-shift in the original version was the cause of
+% the visible contour offset along the depth axis.
+vphi = griddata(cutpos(:, 2), cutpos(:, 3), cutvalue, xi + 0.5, yi);
 
 figure;
 [c, h] = contour(xi, yi, log10(vphi), clines, 'r-', 'LineWidth', 2);

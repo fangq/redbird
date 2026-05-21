@@ -79,7 +79,7 @@ cfg = rbsetmesh(cfg, node, elem, cfg.prop, ones(size(node, 1), 1));
 
 % MC path: route cfg.nphoton through to mmclab. detdir is auto-filled
 % from the surface mesh by rbrunforward via rbgetdetdir if absent.
-cfg.nphoton = 4e8;
+cfg.nphoton = 2e7;
 cfg.gpuid = '11';
 cfg = rmfield(cfg, 'detdir');   % let rbgetdetdir compute inward normals
 

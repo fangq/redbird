@@ -12,6 +12,12 @@ function [recon, resid, cfg, updates, Jmua, detphi0iter, phi] = rbrunrecon(varar
 % input:
 %     cfg: simulation settings stored as a redbird data structure
 %     recon: reconstruction data structure, recon may have
+%         isratio (optional): if set to 1, detphi0 is treated as the measured
+%              ratio I/I0 (e.g. fNIRS exp(-dOD)) instead of absolute data. On the
+%              first iteration it is multiplied by the baseline forward model to form
+%              an effective absolute measurement, then kept fixed. Combine with
+%              'reform','real' for Born or 'reform','logphase' for Rytov difference
+%              imaging. NOTE: detphi0 (a containers.Map) is modified in place.
 %         node: reconstruction mesh node list
 %         elem: reconstruction mesh elem list
 %         bulk: a struct storing the initial guesses of the param
@@ -205,6 +211,22 @@ for iter = 1:maxiter
 
     %     run forward on forward mesh
     [detphi, phi, ~, ~, ~, Jext] = rbrunforward(cfg, 'solverflag', solverflag, 'sd', sd, 'rfcw', rfcw);
+
+    % differential (ratiometric) input data, e.g. fNIRS dOD converted to a ratio.
+    % when recon.isratio is true, detphi0 holds the measured ratio I/I0 (=exp(-dOD));
+    % on the FIRST iteration we convert it to an effective absolute measurement using
+    % the baseline forward model (detphi0_abs = (I/I0).*model), then freeze it so the
+    % subsequent Gauss-Newton iterations fit a fixed absolute target. Combine with
+    % 'reform','logphase' for a Rytov (OD) reconstruction or the default 'real' for Born.
+    if (iter == 1 && isstruct(recon) && isfield(recon, 'isratio') && recon.isratio)
+        if (isa(detphi0, 'containers.Map'))
+            for wv = detphi0.keys
+                detphi0(wv{1}) = detphi0(wv{1}) .* detphi(wv{1});
+            end
+        else
+            detphi0 = detphi0 .* detphi;
+        end
+    end
 
     if isfield(cfg, 'sdscale')
         for ii = 1:length(phi)

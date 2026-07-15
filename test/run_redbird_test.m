@@ -102,7 +102,7 @@ fprintf(1, '%s\n', bar);
 if RB_FAIL == 0
     fprintf(1, 'All %d tests passed.\n', RB_TOTAL);
 else
-    fprintf(2, '%d / %d tests FAILED.\n', RB_FAIL, RB_TOTAL);
+    error('%d / %d tests FAILED.', RB_FAIL, RB_TOTAL);
 end
 
 % =========================================================================

@@ -389,10 +389,24 @@ if seglen < 1e-12
 end
 dirvec = (p2 - p1) / seglen;
 
-[estart, barystart] = tsearchn(cfg.node(:, 1:3), cfg.elem(:, 1:4), p1);
+% same perpendicular nudge as ray_trace_geom: a line lying exactly on shared
+% tet faces (axis-aligned line on a symmetric mesh) can leave no valid
+% forward exit mid-walk, or make tsearchn fail to locate the start point
+abs_dir = abs(dirvec);
+[~, idx] = min(abs_dir);
+e_arb = zeros(1, 3);
+e_arb(idx) = 1;
+perp1 = cross(dirvec, e_arb);
+perp1 = perp1 / norm(perp1);
+perp2 = cross(dirvec, perp1);
+perp2 = perp2 / norm(perp2);
+p1 = p1 + 1e-6 * perp1 + 1.3e-6 * perp2;
+
+[estart, barystart, p1, ldrop] = locatestart(p1, dirvec, seglen, cfg);
 if isnan(estart)
     return
 end
+seglen = seglen - ldrop;
 
 face_local = [1 2 3; 1 2 4; 1 3 4; 2 3 4];
 
@@ -559,7 +573,7 @@ p0 = p0 + 1e-6 * perp1 + 1.3e-6 * perp2;
 geom = struct('elemids', zeros(0, 1), 'zs', zeros(0, 2), ...
               'barys_in', zeros(0, 4), 'barys_out', zeros(0, 4));
 
-[estart, barystart] = tsearchn(cfg.node(:, 1:3), cfg.elem(:, 1:4), p0);
+[estart, barystart, p0, ldrop] = locatestart(p0, dirvec, L_max, cfg);
 if isnan(estart)
     return
 end
@@ -570,7 +584,7 @@ e = estart;
 pcur = p0;
 barycur = barystart(:)';
 zcur = 0;
-lrem = L_max;
+lrem = L_max - ldrop;
 
 elemids = [];
 zs = [];
@@ -637,6 +651,30 @@ geom.elemids = elemids;
 geom.zs = zs;
 geom.barys_in = barys_in;
 geom.barys_out = barys_out;
+
+function [estart, barystart, pstart, ldrop] = locatestart(p0, dirvec, ltotal, cfg)
+% locate the tet enclosing the start of a line/ray. A start point sitting
+% exactly on the mesh surface (typical for boundary-launched lines/rays) can
+% land epsilon-outside all tets because the tetgen-generated coordinates
+% round differently across platforms, making tsearchn return NaN and silently
+% zeroing the whole source. Retry with the point pushed slightly inward along
+% dirvec; ldrop returns the consumed length (at most 1e-3*ltotal, physically
+% negligible).
+
+pstart = p0;
+ldrop = 0;
+[estart, barystart] = tsearchn(cfg.node(:, 1:3), cfg.elem(:, 1:4), p0);
+if ~isnan(estart)
+    return
+end
+for shift = [1e-9, 1e-6, 1e-3] * ltotal
+    [estart, barystart] = tsearchn(cfg.node(:, 1:3), cfg.elem(:, 1:4), p0 + shift * dirvec);
+    if ~isnan(estart)
+        pstart = p0 + shift * dirvec;
+        ldrop = shift;
+        return
+    end
+end
 
 function rowvec = ray_integrate(geom, amp, rate, cfg)
 % accumulate the closed-form integral amp * exp(-rate * z) * baryc(z) across

@@ -58,7 +58,10 @@ if (nargin == 3)
     goodsrc = unique(goodsrc);
     [tf, goodidx] = find(sum(optodeloc(:, srcnum + wfsrcnum + 1:srcnum + wfsrcnum + detnum + wfdetnum)));
     goodidx = unique(goodidx);
-    detval = optodeloc(:, [1:detnum + wfdetnum] + srcnum + wfsrcnum)' * phi(:, [1:srcnum + wfsrcnum]);
+    % use non-conjugating transpose: the widefield detector RHS is complex for
+    % MWT (scaled by -j*omega*mu0); a conjugate transpose here would flip the
+    % sign of the measurement relative to the adjoint-based Jacobian in rbjac
+    detval = optodeloc(:, [1:detnum + wfdetnum] + srcnum + wfsrcnum).' * phi(:, [1:srcnum + wfsrcnum]);
     %     detval=optodeloc(:,goodidx+srcnum+wfsrcnum)'*phi(:,goodsrc);
 elseif (isempty(goodidx) && size(cfg.detpos, 2) == size(cfg.node, 1)) % wide-field det
     for i = 1:srcnum

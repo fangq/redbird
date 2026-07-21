@@ -201,7 +201,7 @@ for iter = 1:maxiter
         end
     end
 
-    if (isfield(recon, 'param') && length(recon.param.hbo) == length(recon.node) && debugplot == 1)
+    if (debugplot == 1 && isfield(recon, 'param') && isfield(recon.param, 'hbo') && isfield(recon.param, 'hbr') && length(recon.param.hbo) == length(recon.node))
         figure(15);
         plotmesh([recon.node recon.param.hbo + recon.param.hbr], recon.elem, sprintf('z=%d', (max(recon.node(:, 3)) + min(recon.node(:, 3))) / 2));
         colorbar;
@@ -211,6 +211,17 @@ for iter = 1:maxiter
 
     %     run forward on forward mesh
     [detphi, phi, ~, ~, ~, Jext] = rbrunforward(cfg, 'solverflag', solverflag, 'sd', sd, 'rfcw', rfcw);
+
+    % rbrunforward unwraps single-wavelength outputs into plain arrays; when
+    % the recon uses the containers.Map pipeline (Map-based cfg.prop/sd/detphi0),
+    % re-wrap them so downstream key-based lookups (rbjac/rbmultispectral) work
+    if (isa(cfg.prop, 'containers.Map') && cfg.prop.Count == 1 && ~isa(detphi, 'containers.Map'))
+        wvkey = cfg.prop.keys;
+        detphi = containers.Map(wvkey, {detphi});
+        if (~isstruct(phi) && ~isa(phi, 'containers.Map'))
+            phi = containers.Map(wvkey, {phi});
+        end
+    end
 
     % differential (ratiometric) input data, e.g. fNIRS dOD converted to a ratio.
     % when recon.isratio is true, detphi0 holds the measured ratio I/I0 (=exp(-dOD));
@@ -341,6 +352,17 @@ for iter = 1:maxiter
 
     % build Jacobians for chromophores in the form of a struct
     % TODO: need to handle Jmua is a map but cfg.param is not defined
+    % rbjac also unwraps single-wavelength Jacobians into plain arrays, but the
+    % Helmholtz (MWT) epsilon/sigma chaining in rbmultispectral only exists in
+    % the containers.Map path; re-wrap using the true frequency key
+    if (isa(cfg.prop, 'containers.Map') && cfg.prop.Count == 1 && isfield(cfg, 'param') && isstruct(cfg.param) && ...
+        (isfield(cfg.param, 'epsilon') || isfield(cfg.param, 'sigma')) && isnumeric(Jmua))
+        Jmua = containers.Map(cfg.prop.keys, {Jmua});
+        if (exist('Jd', 'var') && isnumeric(Jd))
+            Jd = containers.Map(cfg.prop.keys, {Jd});
+        end
+    end
+
     if (isa(cfg.prop, 'containers.Map') && isfield(cfg, 'param') && isa(cfg.param, 'struct'))
         if (exist('Jd', 'var'))
             [Jmua, detphi0iter, detphi] = rbmultispectral(sd, cfg, Jmua, detphi0, detphi, cfg.param, rfcw, Jd, cfg.prop);

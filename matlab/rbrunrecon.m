@@ -12,6 +12,19 @@ function [recon, resid, cfg, updates, Jmua, detphi0iter, phi] = rbrunrecon(varar
 % input:
 %     cfg: simulation settings stored as a redbird data structure
 %     recon: reconstruction data structure, recon may have
+%         sdcoupling (optional, also accepted as an option): enable
+%              simultaneous source-detector coupling coefficient estimation;
+%              'y' fits one complex multiplicative coefficient per coupling
+%              channel using both source and detector roles, 's'/'d' fit
+%              source-only/detector-only; the model is
+%              phi_hat(d,s)=c(chan(s))*c(chan(d))*phi(d,s), with coefficients
+%              shared across wavelengths; see also recon.sdindex, recon.sd,
+%              and options 'sdweight'/'sdprior'; results in newrecon.sd
+%         sdindex (optional): maps the [sources; detectors] optode list to
+%              coupling channels; default all-independent; use repeated
+%              indices (e.g. [1:16,1:16]) when a source and a detector are
+%              the same physical optode such as MWT antennas
+%         sd (optional): initial complex coupling coefficients (default 1)
 %         isratio (optional): if set to 1, detphi0 is treated as the measured
 %              ratio I/I0 (e.g. fNIRS exp(-dOD)) instead of absolute data. On the
 %              first iteration it is multiplied by the baseline forward model to form
@@ -138,6 +151,28 @@ blockmask = jsonopt('blockmask', [], opt);
 musscale = jsonopt('musscale', 0.5, opt);
 mode = jsonopt('mode', 'image', opt);
 debugplot = jsonopt('debugplot', 0, opt);
+
+% simultaneous source-detector (SD) coupling coefficient estimation options:
+% 'sdcoupling': 'n' (off, default), 'y' (both roles), 's' (source-only),
+%      'd' (detector-only); logical true is mapped to 'y'
+% 'sdweight': extra weight of the SD Jacobian columns (like blockscale)
+% 'sdprior': if >0, Tikhonov pull of the coupling coefficients toward 1+0i
+sdmode = jsonopt('sdcoupling', 'n', recon);
+sdmode = jsonopt('sdcoupling', sdmode, opt);
+if (isnumeric(sdmode) || islogical(sdmode))
+    if (sdmode)
+        sdmode = 'y';
+    else
+        sdmode = 'n';
+    end
+end
+% 'sdfirst': fit ONLY the coupling coefficients (freezing the image) during
+%      the first N iterations - the couplings are linearly separable from the
+%      initial misfit, so this avoids cross-talk with the image unknowns
+sdweight = jsonopt('sdweight', jsonopt('sdweight', 1, recon), opt);
+sdprior = jsonopt('sdprior', jsonopt('sdprior', 0, recon), opt);
+sdfirst = jsonopt('sdfirst', jsonopt('sdfirst', 0, recon), opt);
+dosd = ismember(sdmode, {'y', 's', 'd'});
 isreduced = 0;
 
 % create or accept regularization matrix
@@ -176,6 +211,39 @@ end
 
 if (length(rfcw) < 2 && (isstruct(detphi0) && length(detphi0) > 1))
     detphi0 = detphi0(rfcw).detphi;
+end
+
+% initialize the SD coupling unknowns: one complex coefficient per coupling
+% channel; recon.sdindex maps every optode (sources first, then detectors,
+% using the same global indices as the sd table) to a channel - tie a source
+% and a detector to one channel when they are the same physical optode (e.g.
+% MWT antennas); coefficients are shared across wavelengths
+if (dosd)
+    nsrctot = 0;
+    ndettot = 0;
+    if (isfield(cfg, 'srcpos'))
+        nsrctot = nsrctot + size(cfg.srcpos, 1);
+    end
+    if (isfield(cfg, 'widesrc'))
+        nsrctot = nsrctot + size(cfg.widesrc, 1);
+    end
+    if (isfield(cfg, 'detpos'))
+        ndettot = ndettot + size(cfg.detpos, 1);
+    end
+    if (isfield(cfg, 'widedet'))
+        ndettot = ndettot + size(cfg.widedet, 1);
+    end
+    if (~isfield(recon, 'sdindex') || isempty(recon.sdindex))
+        recon.sdindex = 1:(nsrctot + ndettot);
+    end
+    recon.sdindex = recon.sdindex(:)';
+    if (length(recon.sdindex) ~= nsrctot + ndettot)
+        error('recon.sdindex must have one entry per optode (%d sources + %d detectors)', nsrctot, ndettot);
+    end
+    if (~isfield(recon, 'sd') || isempty(recon.sd))
+        recon.sd = complex(ones(max(recon.sdindex), 1), 0);
+    end
+    recon.sd = recon.sd(:);
 end
 
 % start iterative Gauss-Newton based reconstruction
@@ -236,6 +304,38 @@ for iter = 1:maxiter
             end
         else
             detphi0 = detphi0 .* detphi;
+        end
+    end
+
+    % simultaneous SD coupling estimation: scale the model prediction and the
+    % forward/adjoint field columns by the current per-optode coupling factors
+    % so that the misfit AND the property Jacobians (built from phi by rbjac)
+    % consistently describe the model phi_hat(d,s)=c_s*c_d*phi(d,s)
+    if (dosd)
+        sdfac = recon.sd(recon.sdindex);
+        srcfac = sdfac(1:nsrctot);
+        detfac = sdfac(nsrctot + 1:end);
+        if (isa(detphi, 'containers.Map'))
+            for wv = detphi.keys
+                detphi(wv{1}) = detphi(wv{1}) .* (detfac(:) * srcfac(:).');
+            end
+        elseif (isnumeric(detphi))
+            detphi = detphi .* (detfac(:) * srcfac(:).');
+        else
+            error('sdcoupling does not yet support multi-modality (rfcw) forward outputs');
+        end
+        if (isa(phi, 'containers.Map'))
+            for wv = phi.keys
+                phi(wv{1}) = phi(wv{1}) .* sdfac(:).';
+            end
+        elseif (isstruct(phi) && length(phi) == 1 && isa(phi(1).phi, 'containers.Map'))
+            for wv = phi(1).phi.keys
+                phi(1).phi(wv{1}) = phi(1).phi(wv{1}) .* sdfac(:).';
+            end
+        elseif (isnumeric(phi))
+            phi = phi .* sdfac(:).';
+        else
+            error('sdcoupling does not yet support multi-modality (rfcw) forward outputs');
         end
     end
 
@@ -506,6 +606,43 @@ for iter = 1:maxiter
         end
     end
 
+    % append the SD coupling Jacobian block (see rbsdjac); columns are
+    % [Re(dc) (or d|c|), Im(dc) (or d angle(c))], Frobenius-normalized like
+    % blockscale and weighted by 'sdweight'; an optional 'sdprior' appends
+    % Tikhonov rows pulling the coefficients toward 1+0i
+    if (dosd)
+        if (strcmp(reform, 'complex'))
+            error('sdcoupling requires ''reform'' set to ''real'', ''reim'' or ''logphase''');
+        end
+        if (isa(detphi0, 'containers.Map'))
+            wvkeys = keys(detphi0);
+        else
+            wvkeys = {''};
+        end
+        Asd = rbsdjac(sd, wvkeys, detphi(:), recon.sd, recon.sdindex, reform, sdmode, rfcw);
+        if (size(Asd, 1) ~= size(Jflat, 1))
+            error('sdcoupling: SD block rows (%d) do not match the reformed system rows (%d); CW-only (real) data is not supported', ...
+                  size(Asd, 1), size(Jflat, 1));
+        end
+        nsdhalf = size(Asd, 2) / 2;
+        if (sdprior > 0)
+            if (strcmp(reform, 'logphase'))
+                sdtarget = [1 - abs(recon.sd); -angle(recon.sd)];
+            else
+                sdtarget = [1 - real(recon.sd); -imag(recon.sd)];
+            end
+            Jflat = [Jflat; zeros(2 * nsdhalf, size(Jflat, 2))];
+            Asd = [Asd; sdprior * eye(2 * nsdhalf)];
+            misfit = [misfit; sdprior * sdtarget];
+        end
+        sdscalefact = [sdweight / norm(Asd(:, 1:nsdhalf), 'fro'), sdweight / norm(Asd(:, nsdhalf + 1:end), 'fro')];
+        sdscalefact(~isfinite(sdscalefact)) = 1;
+        if (iter <= sdfirst)
+            Jflat = Jflat * 0;   % coupling-only fit: freeze the image unknowns
+        end
+        Jflat = [Jflat, Asd(:, 1:nsdhalf) * sdscalefact(1), Asd(:, nsdhalf + 1:end) * sdscalefact(2)];
+    end
+
     % solver the inversion (J*delta_x=delta_y) using regularized
     % Gauss-Newton normal equation
     dmu_recon = rbreginv(Jflat, misfit, lambda, Aregu, blocks, solverflag{:});  % solve the update on the recon mesh
@@ -514,6 +651,28 @@ for iter = 1:maxiter
         for zz = 1:length(scalefact)
             dmu_recon((zz - 1) * cn + 1:zz * cn) = dmu_recon((zz - 1) * cn + 1:zz * cn) .* scalefact(zz);
         end
+    end
+
+    % extract and apply the SD coupling update: additive in the complex form,
+    % or additive in log-magnitude/phase; amplitudes floored at 0.05 as in
+    % Redbird90; the mean is then re-pinned at 1+0i to remove the global
+    % scale ambiguity between the couplings and the image
+    if (dosd)
+        dsd = dmu_recon(end - 2 * nsdhalf + 1:end);
+        dmu_recon = dmu_recon(1:end - 2 * nsdhalf);
+        dsd(1:nsdhalf) = dsd(1:nsdhalf) * sdscalefact(1);
+        dsd(nsdhalf + 1:end) = dsd(nsdhalf + 1:end) * sdscalefact(2);
+        if (strcmp(reform, 'logphase'))
+            sdamp = max(abs(recon.sd) + dsd(1:nsdhalf), 0.05);
+            sdpha = angle(recon.sd) + dsd(nsdhalf + 1:end);
+            recon.sd = sdamp .* exp(1i * sdpha);
+        else
+            recon.sd = recon.sd + complex(dsd(1:nsdhalf), dsd(nsdhalf + 1:end));
+            sdneg = (real(recon.sd) < 0);
+            recon.sd(sdneg) = complex(0.05, imag(recon.sd(sdneg)));
+        end
+        recon.sd = recon.sd - mean(recon.sd) + 1;
+        updates(iter).sd = recon.sd;
     end
 
     % obtain linear index of each output species

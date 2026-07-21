@@ -80,8 +80,13 @@ if (strcmp(form, 'logphase'))
         newrhs = log(abs(ymeas)) - log(abs(ymodel));
     else
         newA = [real(temp); imag(temp)];
+        % wrap the phase difference back into (-pi,pi]: angle() returns wrapped
+        % phases, so the raw difference can be off by +-2*pi when the absolute
+        % phases straddle the +-pi boundary
+        dphase = angle(ymeas) - angle(ymodel);
+        dphase = dphase - 2 * pi * round(dphase / (2 * pi));
         newrhs = [log(abs(ymeas)) - log(abs(ymodel))
-                  angle(ymeas) - angle(ymodel)];
+                  dphase];
         nblock = 1;
     end
     return

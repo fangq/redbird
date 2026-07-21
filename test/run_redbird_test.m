@@ -34,7 +34,7 @@ function run_redbird_test(tests)
 %
 
 if (nargin == 0)
-    tests = {'util', 'jac', 'prop', 'mesh', 'forward', 'solver', 'recon', 'mwt', 'td'};
+    tests = {'util', 'jac', 'prop', 'mesh', 'forward', 'solver', 'recon', 'mwt', 'td', 'sd'};
 end
 
 global RB_FAIL RB_TOTAL
@@ -96,6 +96,11 @@ if (ismember('td', tests) && exist('meshabox', 'file'))
     test_td();
 elseif ismember('td', tests)
     fprintf(2, '[skip] ''td'' requires iso2mesh\n');
+end
+
+if (ismember('sd', tests))
+    fprintf(1, '%s\nSource-detector coupling coefficient estimation\n%s\n', bar, bar);
+    test_sd();
 end
 
 fprintf(1, '%s\n', bar);
@@ -982,3 +987,97 @@ detphi_cw = rbrunforward(cfgC);
 relerr = abs(integ - detphi_cw) / abs(detphi_cw);
 test_redbird('TD integration invariant: int_0^T phi_TD(t) dt ~ phi_CW', ...
              @(r) r < 0.05, true, relerr);
+
+function test_sd()
+
+% ---- rbmatreform logphase: phase misfit must be wrapped into (-pi,pi] ----
+ymeas = exp(1i * (pi - 0.1));
+ymodel = exp(1i * (-pi + 0.1));    % true phase difference = -0.2 after wrapping
+[~, rhs] = rbmatreform(complex(1, 0), ymeas, ymodel, 'logphase');
+test_redbird('rbmatreform logphase wraps phase misfit', ...
+             @(x) abs(x + 0.2) < 1e-9, true, rhs(2));
+
+% ---- rbsdjac unit tests: 2 sources (optodes 1-2), 2 detectors (optodes 3-4) ----
+sdtab = [1 3 1; 2 3 1; 1 4 1; 2 4 1];
+model = [2; 3; 4; 5] .* exp(1i * 0.1);
+csd = complex(ones(4, 1), 0);
+A = rbsdjac(sdtab, {''}, model, csd, 1:4, 'real', 'y');
+test_redbird('rbsdjac real-form block size', @() size(A), [8 8]);
+test_redbird('rbsdjac source column (Re block)', @() A(1, 1), real(model(1)));
+test_redbird('rbsdjac detector column (Re block)', @() A(1, 3), real(model(1)));
+test_redbird('rbsdjac Im block', @() A(5, 1), imag(model(1)));
+test_redbird('rbsdjac Cauchy-Riemann cross block', @() A(1, 5), -imag(model(1)));
+Al = rbsdjac(sdtab, {''}, model, 2 * csd, 1:4, 'logphase', 'y');
+test_redbird('rbsdjac logphase amp block = 1/|c|', @() Al(1, 1), 0.5);
+test_redbird('rbsdjac logphase phase block = 1', @() Al(5, 5), 1);
+test_redbird('rbsdjac logphase cross blocks are zero', ...
+             @() max(max(abs(Al(1:4, 5:8))) , max(abs(Al(5:8, 1:4)))), [0 0 0 0]);
+As = rbsdjac(sdtab, {''}, model, csd, 1:4, 'real', 's');
+test_redbird('rbsdjac source-only mode skips det columns', @() max(abs(As(:, 3))), 0);
+% shared channels (MWT antennas): source k and detector k are one channel
+Ash = rbsdjac(sdtab, {''}, model, csd(1:2), [1 2 1 2], 'real', 'y');
+test_redbird('rbsdjac shared-channel width', @() size(Ash, 2), 4);
+% row 1 is measurement (src=1, det=3): both optodes map to channel 1, so
+% the source and detector roles accumulate in the same column
+test_redbird('rbsdjac shared-channel accumulates roles', ...
+             @() Ash(1, 1), 2 * real(model(1)));
+
+if (~exist('meshabox', 'file'))
+    fprintf(2, '[skip] sd end-to-end test requires iso2mesh\n');
+    return
+end
+
+% ---- end-to-end: recover known antenna couplings from corrupted MWT data ----
+mu0_mm = 4 * pi * 1e-10;
+nant = 16;
+eps_bg = 25.5;
+sig_bg = 1.2e-3;
+fkey = '1100';
+ang = -pi / 2 - (0:nant - 1)' * 2 * pi / nant;
+antpos = [76.2 * cos(ang), 76.2 * sin(ang), -5 * ones(nant, 1)];
+cfg = struct;
+cfg.srctype = 'line';
+cfg.srcpos = antpos;
+cfg.srcparam1 = [0 0 10];
+cfg.dettype = 'line';
+cfg.detpos = antpos;
+cfg.detparam1 = [0 0 10];
+[cfg.node, cfg.face, cfg.elem] = meshacylinder([0 0 -50], [0 0 50], 100, 10, 300);
+cfg.elem = cfg.elem(:, 1:4);
+cfg.seg = ones(size(cfg.elem, 1), 1);
+cfg.bulk = struct('epsilon', eps_bg, 'sigma', sig_bg, 'n', sqrt(eps_bg));
+cfg.prop = containers.Map({fkey}, {[1 0 mu0_mm 1; eps_bg sig_bg mu0_mm sqrt(eps_bg)]});
+cfg.omega = containers.Map({fkey}, {2 * pi * 1.1e9});
+cfg = rbmeshprep(cfg);
+
+rand('state', 1234);
+ctrue = (0.85 + 0.3 * rand(nant, 1)) .* exp(1i * (rand(nant, 1) - 0.5) * (20 * pi / 180));
+ratio = ctrue(:) * ctrue(:).';       % homogeneous target: data ratio = coupling only
+ratio(1:nant + 1:end) = nan;
+
+sd = rbsdmap(cfg);
+sdwv = sd(fkey);
+sdwv(:, 3) = (sdwv(:, 2) - nant ~= sdwv(:, 1));
+sd(fkey) = sdwv;
+
+recon = struct;
+[recon.node, ~, recon.elem] = meshacylinder([0 0 -50], [0 0 50], 100, 15, 1500);
+recon.elem = recon.elem(:, 1:4);
+[recon.mapid, recon.mapweight] = tsearchn(recon.node, recon.elem, cfg.node);
+recon.bulk = struct('epsilon', eps_bg, 'sigma', sig_bg);
+recon.param = struct('epsilon', eps_bg, 'sigma', sig_bg);
+recon.prop = containers.Map({fkey}, {[]});
+recon.isratio = 1;
+recon.sdcoupling = 'y';
+recon.sdindex = [1:nant, 1:nant];
+
+[newrecon, resid] = rbrun(cfg, recon, containers.Map({fkey}, {ratio}), sd, ...
+                          'mode', 'image', 'lambda', 1e-2, 'maxiter', 3, ...
+                          'reform', 'logphase', 'sdfirst', 1, 'report', 0);
+ctrue_pin = ctrue - mean(ctrue) + 1;
+test_redbird('SD recovers known couplings (max err < 0.05)', ...
+             @(x) max(abs(x - ctrue_pin)) < 0.05, true, newrecon.sd);
+test_redbird('SD reduces the residual by > 2x', ...
+             @(r) r(end, 1) < 0.5 * r(1, 1), true, resid);
+test_redbird('SD coefficients pinned at mean 1', ...
+             @(x) abs(mean(x) - 1) < 1e-9, true, newrecon.sd);

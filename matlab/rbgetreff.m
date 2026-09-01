@@ -19,7 +19,7 @@ function Reff = rbgetreff(n_in, n_out)
 %
 %    original file name calcExtBnd
 %    this file was modified from the PMI toolbox
-% -- this function is part of Redbird-m toolbox
+% -- this function is part of Redbird toolbox
 %
 
 if (nargin == 1)

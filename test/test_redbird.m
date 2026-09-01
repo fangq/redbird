@@ -19,7 +19,7 @@ function pass = test_redbird(testname, fhandle, expected, varargin)
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details
 %
-% -- this function is part of Redbird-m toolbox
+% -- this function is part of Redbird toolbox
 %
 
 global RB_RTOL RB_ATOL RB_FAIL RB_TOTAL

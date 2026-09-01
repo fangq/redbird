@@ -23,7 +23,7 @@ function [Jmua_n, Jmua_e, Jd_n, Jd_e] = rbjac(sd, phi, deldotdel, felem, evol, v
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details
 %
-% -- this function is part of Redbird-m toolbox
+% -- this function is part of Redbird toolbox
 %
 
 if (nargin < 5 || isempty(sd) || isempty(phi) || isempty(deldotdel) || isempty(evol))

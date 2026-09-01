@@ -20,7 +20,7 @@ function [rows, cols, connnum] = rbfemnz(elem, nn)
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details
 %
-% -- this function is part of Redbird-m toolbox
+% -- this function is part of Redbird toolbox
 %
 
 [conn, connnum, count] = meshconn(elem, nn);

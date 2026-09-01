@@ -18,7 +18,7 @@ function [sa, sp] = rbmusp2sasp(musp, lambda)
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details
 %
-% -- this function is part of Redbird-m toolbox
+% -- this function is part of Redbird toolbox
 %
 
 lambda = lambda / 500;

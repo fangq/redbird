@@ -5,7 +5,7 @@ function run_redbird_test(tests)
 % run_redbird_test(tests)
 % run_redbird_test({'util','jac','prop','mesh','forward','solver','recon'})
 %
-% Unit tests for Redbird-m. Tests are grouped so they can be run
+% Unit tests for Redbird. Tests are grouped so they can be run
 % selectively when iso2mesh / mmclab is unavailable for the heavier groups.
 %
 % input:
@@ -30,7 +30,7 @@ function run_redbird_test(tests)
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details
 %
-% -- this function is part of Redbird-m toolbox
+% -- this function is part of Redbird toolbox
 %
 
 if (nargin == 0)

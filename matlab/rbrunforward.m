@@ -95,7 +95,7 @@ function [detval, phi, Amat, rhs, sflag, Jext] = rbrunforward(cfg, varargin)
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details
 %
-% -- this function is part of Redbird-m toolbox
+% -- this function is part of Redbird toolbox
 %
 
 opt = varargin2struct(varargin{:});

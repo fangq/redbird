@@ -31,7 +31,7 @@ function [finalAmat, finalrhs, nblock] = rbcreateinv(Amat, ymeas, ymodel, params
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details
 %
-% -- this function is part of Redbird-m toolbox
+% -- this function is part of Redbird toolbox
 %
 
 % convert an inverse problem to the log-amplitude and unwrapped phase form

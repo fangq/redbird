@@ -99,7 +99,7 @@ function [recon, resid, cfg, updates, Jmua, detphi0iter, phi] = rbrunrecon(varar
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details
 %
-% -- this function is part of Redbird-m toolbox
+% -- this function is part of Redbird toolbox
 %
 
 inputs = varargin;

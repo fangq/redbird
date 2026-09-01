@@ -30,7 +30,7 @@ function detdir = rbgetdetdir(cfg)
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details
 %
-% -- this function is part of Redbird-m toolbox
+% -- this function is part of Redbird toolbox
 %
 
 if (~isfield(cfg, 'node') || ~isfield(cfg, 'elem') || ~isfield(cfg, 'detpos'))

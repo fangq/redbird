@@ -22,7 +22,7 @@ function [pointsrc, pointdet, widesrc, widedet] = rbgetoptodes(cfg, wv)
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details
 %
-% -- this function is part of Redbird-m toolbox
+% -- this function is part of Redbird toolbox
 %
 
 pointsrc = [];        % EXu - Separated source and detector so easier to concatenate in rbfemrhs

@@ -261,6 +261,50 @@ err_high = norm(high_snr - data_lg);
 test_redbird('rbaddnoise high SNR -> smaller deviation', ...
              @(r) r > 5, true, err_low / err_high);
 
+% Requested snrshot is the SNR of the strongest channel, and is invariant
+% to the units/scale of the data (this is what the max_amp reference buys)
+amp = logspace(0, -2, 3)';
+for scale = [1 1e-6]
+    dd  = repmat(scale * amp, 1, 4000);
+    nn_ = rbaddnoise(dd, 60, Inf, 11);
+    snr_peak = 20 * log10(mean(dd(1, :)) / std(nn_(1, :) - dd(1, :)));
+    test_redbird(sprintf('rbaddnoise peak SNR matches request (scale %g)', scale), ...
+                 @(e) e < 1.5, true, abs(snr_peak - 60));
+    % weaker channels follow SNR = snrshot + 10*log10(a/max_amp)
+    snr_wk = 20 * log10(mean(dd(3, :)) / std(nn_(3, :) - dd(3, :)));
+    test_redbird(sprintf('rbaddnoise shot noise scales as sqrt(amp) (scale %g)', scale), ...
+                 @(e) e < 1.5, true, abs(snr_wk - 40));
+end
+
+% Complex (frequency-domain) data: real-valued SNR must work, amplitude
+% noise must match the CW case, and phase error must follow sigma/|data|
+dcw = 1e-6 * ones(1, 8000);
+dfd = 1e-6 * exp(1i * 0.7) * ones(1, 8000);
+ncw = rbaddnoise(dcw, 50, Inf, 21);
+nfd = rbaddnoise(dfd, 50, Inf, 21);
+test_redbird('rbaddnoise complex data stays complex', @(x) ~isreal(x), true, nfd);
+test_redbird('rbaddnoise complex amp noise matches CW', ...
+             @(r) abs(r - 1) < 0.1, true, ...
+             std(abs(nfd) - 1e-6) / std(ncw - dcw));
+test_redbird('rbaddnoise complex phase noise = sigma/|data|', ...
+             @(r) abs(r - 1) < 0.1, true, ...
+             std(angle(nfd) - 0.7) / (10^(-50 / 20)));
+
+% Noise must be isotropic about the signal phasor, not pinned to the real axis
+efd = (nfd - dfd) * exp(-1i * 0.7);
+test_redbird('rbaddnoise complex noise is circular in signal frame', ...
+             @(r) abs(r - 1) < 0.15, true, std(imag(efd)) / std(real(efd)));
+
+% Imaginary part of the SNR adds extra phase jitter, in radian
+njit = rbaddnoise(dfd, complex(Inf, 40), Inf, 22);
+test_redbird('rbaddnoise imag(snr) sets phase jitter', ...
+             @(r) abs(r - 1) < 0.1, true, ...
+             std(angle(njit) - 0.7) / 0.01);
+
+% Seed is honored when snrthermal is omitted (nargin==2)
+test_redbird('rbaddnoise seeds with 2 args', @() rbaddnoise(data, 30), ...
+             rbaddnoise(data, 30));
+
 % =========================================================================
 function test_jac()
 

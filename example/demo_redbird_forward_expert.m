@@ -124,7 +124,9 @@ hist(dd(:), 100);
 
 dist = rbgetdistance(cfg.srcpos, cfg.detpos);
 plot(dist(:), log10(abs(detval(:))), '.');
-newdata = rbaddnoise(detval, 110, 40);
+% snrshot is referenced to the strongest channel (max|detval|~2e-7 here);
+% this 43 dB matches the 110 dB used before rbaddnoise was renormalized
+newdata = rbaddnoise(detval, 43, 40);
 hold on;
 plot(dist(:), log10(abs(newdata(:))), 'r.');
 hold off;

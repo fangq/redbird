@@ -84,7 +84,7 @@ void mexFunction(int nlhs,       mxArray* plhs[],
             jac.sd = mxGetPr(prhs[1]);
             jac.nsd = arraydim[0];
             jac.nsdcol = arraydim[1];
-            isjacobian = nlhs;
+            isjacobian = 1;   /* the inputs choose the mode, not how many outputs were asked for */
 
             if (nrhs <= 2) {
                 MEXERROR("sd and phi must be given to calculate Jacobians");
@@ -158,70 +158,48 @@ void mexFunction(int nlhs,       mxArray* plhs[],
          * matrix is real and we fall through to the else branch. */
         int wantcomplex = (cfg.omega > 0.f);
 
-        /* Assign a pointer to the output. */
-        if (wantcomplex) {
-            if (nlhs >= 1) {
-                if (isjacobian == 0) {
-                    plhs[0] = mxCreateDoubleMatrix(1, mesh.nn, mxCOMPLEX);
-                    femdata.Di = mxGetPi(plhs[0]);
-                } else {
-                    plhs[0] = mxCreateDoubleMatrix(jac.nsd, (jac.nn ? jac.nn : (jac.isnodal ? mesh.nn : mesh.ne)), mxCOMPLEX);
-                    jac.Jmuai = mxGetPi(plhs[0]);
-                }
-            }
-
-            if (nlhs >= 2) {
-                if (isjacobian == 0) {
-                    plhs[1] = mxCreateDoubleMatrix(1, mesh.ntot, mxCOMPLEX);
-                    femdata.Ai = mxGetPi(plhs[1]);
-                } else {
-                    plhs[1] = mxCreateDoubleMatrix(jac.nsd, (jac.nn ? jac.nn : (jac.isnodal ? mesh.nn : mesh.ne)), mxCOMPLEX);
-                    jac.Jdi = mxGetPi(plhs[1]);
-                }
-            }
-        } else {
-            if (isjacobian == 0) {
-                if (nlhs >= 1) {
-                    plhs[0] = mxCreateDoubleMatrix(1, mesh.nn, mxREAL);
-                }
-
-                if (nlhs >= 2) {
-                    plhs[1] = mxCreateDoubleMatrix(1, mesh.ntot, mxREAL);
-                }
-            } else {
-                if (nlhs >= 1) {
-                    plhs[0] = mxCreateDoubleMatrix(jac.nsd, (jac.nn ? jac.nn : (jac.isnodal ? mesh.nn : mesh.ne)), mxREAL);
-                }
-
-                if (nlhs >= 2) {
-                    plhs[1] = mxCreateDoubleMatrix(jac.nsd, (jac.nn ? jac.nn : (jac.isnodal ? mesh.nn : mesh.ne)), mxREAL);
-                }
-            }
-        }
+        /* Create the outputs the computation writes through, whatever nlhs
+           asks for: the assembly fills Adiag, Aoff and deldotdel, and the
+           Jacobian always fills Jmua, so an output the caller did not
+           request still needs somewhere to go. What was not asked for is
+           destroyed once the work is done. Jd is the exception -- the
+           Jacobian skips it when its pointer is NULL, so it is made only
+           when it was asked for. */
+        mwSize ncol = (jac.nn ? jac.nn : (jac.isnodal ? mesh.nn : mesh.ne));
+        mxComplexity cplx = wantcomplex ? mxCOMPLEX : mxREAL;
+        mxArray* out[3] = {NULL, NULL, NULL};
 
         if (isjacobian == 0) {
-            if (nlhs >= 1) {
-                femdata.Dr = mxGetPr(plhs[0]);
-            }
+            out[0] = mxCreateDoubleMatrix(1, mesh.nn, cplx);
+            out[1] = mxCreateDoubleMatrix(1, mesh.ntot, cplx);
+            femdata.Dr = mxGetPr(out[0]);
+            femdata.Ar = mxGetPr(out[1]);
 
-            if (nlhs >= 2) {
-                femdata.Ar = mxGetPr(plhs[1]);
+            if (wantcomplex) {
+                femdata.Di = mxGetPi(out[0]);
+                femdata.Ai = mxGetPi(out[1]);
             }
         } else {
-            if (nlhs >= 1) {
-                jac.Jmuar = mxGetPr(plhs[0]);
+            out[0] = mxCreateDoubleMatrix(jac.nsd, ncol, cplx);
+            jac.Jmuar = mxGetPr(out[0]);
+
+            if (wantcomplex) {
+                jac.Jmuai = mxGetPi(out[0]);
             }
 
             if (nlhs >= 2) {
-                jac.Jdr = mxGetPr(plhs[1]);
+                out[1] = mxCreateDoubleMatrix(jac.nsd, ncol, cplx);
+                jac.Jdr = mxGetPr(out[1]);
+
+                if (wantcomplex) {
+                    jac.Jdi = mxGetPi(out[1]);
+                }
             }
         }
 
-        if (nlhs >= 3) {
-            plhs[2] = mxCreateDoubleMatrix(10, mesh.ne, mxREAL);
-            femdata.deldotdel = mxGetPr(plhs[2]);
-        } else {
-            femdata.deldotdel = (double*)calloc(mesh.ne, 10 * sizeof(double));
+        if (isjacobian == 0 || nlhs >= 3) {
+            out[2] = mxCreateDoubleMatrix(10, mesh.ne, mxREAL);
+            femdata.deldotdel = mxGetPr(out[2]);
         }
 
         if (isjacobian == 0) {
@@ -252,9 +230,16 @@ void mexFunction(int nlhs,       mxArray* plhs[],
             rb_femjacobian(&cfg, &mesh, &jac);
         }
 
-        if (nlhs < 3 && femdata.deldotdel) {
-            delete (femdata.deldotdel);
+        /* plhs[0] always has room -- it becomes ans when nlhs is 0 */
+        for (int i = 0; i < 3; i++) {
+            if (i == 0 || i < nlhs) {
+                plhs[i] = out[i];
+            } else if (out[i]) {
+                mxDestroyArray(out[i]);
+            }
         }
+
+        femdata.deldotdel = NULL;
 
         /** \subsection sclean End the simulation */
         mesh_clear(&mesh);

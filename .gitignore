@@ -1,0 +1,19 @@
+# editor/runtime debris
+*.swp
+*~
+hs_err_pid*.log
+octave-workspace
+
+# build outputs
+bin/
+src/
+*.o
+*.mexa64
+*.mexmaci64
+*.mexmaca64
+*.mexw64
+
+# scratch outputs from running demos
+example/*.png
+example/*.mat
+dense_jacobian.txt

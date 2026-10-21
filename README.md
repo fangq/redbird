@@ -2,9 +2,9 @@
 
 # Redbird - A Model-Based Diffuse Optical Imaging Toolbox
 
-* **Copyright**: (C) Qianqian Fang (2005–2025) \<q.fang at neu.edu>, Edward Xu (2024) \<xu.ed at northeastern.edu>
+* **Copyright**: (C) Qianqian Fang (2005–2026) \<q.fang at neu.edu>, Edward Xu (2024) \<xu.ed at northeastern.edu>
 * **License**: GNU Public License V3 or later
-* **Version**: 0.5.1 (Northern Cardinal - Update 1)
+* **Version**: 0.6.0 (v2026, CODENAME_TBD)
 * **GitHub**: [https://github.com/fangq/redbird](https://github.com/fangq/redbird)
 * **Acknowledgement**: This project is supported by the US National Institute of Health (NIH)
   grant [R01-CA204443](https://reporter.nih.gov/project-details/10982160)
@@ -13,11 +13,11 @@
 
 
 ## Table of Contents
+- [What's New](#whats-new)
 - [Introduction](#introduction)
 - [How to Install](#how-to-install)
 - [Workflow Overview](#workflow-overview)
 - [Redbird Function Overview](#redbird-function-overview)
-- [How to Install](#how-to-install)
 - [Data Structures](#data-structures)
   - [Forward Data Structure `cfg`](#forward-data-structure-cfg)
   - [Inverse Data Structure `recon`](#inverse-data-structure-cfg)
@@ -29,6 +29,34 @@
 - [How to Cite](#how-to-cite)
 
 ---------
+
+## What's New
+
+Redbird v0.6.0 (v2026) is bundled with the MCX/MCX-CL/MMC v2026 (3.0) release. It adds
+Monte Carlo forward solvers, two new imaging modalities and a unit test suite:
+
+* **Monte Carlo forward solvers**: setting `cfg.nphoton` in `rbrunforward` runs `mmclab`
+  (when `cfg.node`/`cfg.elem` are given) or `mcxlab` (when `cfg.vol` is given) in place of
+  the FEM diffusion solver; mmclab returns the mesh-space adjoint Jacobian (`Jext`) that
+  `rbrunrecon` consumes directly, and mcxlab returns a voxel-grid adjoint Jacobian that is
+  inverted by a matrix-free LSQR solver (`rbreglsqr`/`rbjacop`); per-node optical
+  properties are detected automatically for MC-based DOT reconstruction
+* **time-domain DOT**: a Crank-Nicolson time-domain forward solver (`rbruntd`), validated
+  against mmclab
+* **microwave tomography (MWT)**: Helmholtz forward and inverse solvers with the
+  Bayliss-Turkel radiation boundary condition, accelerated by the `rbfemmatrix` mex
+* **ratiometric (differential) fNIRS reconstruction** via `recon.isratio`
+* simultaneous source-detector coupling coefficient estimation (`recon.sdcoupling`)
+* line and exponentially distributed ray sources, and the
+  `musp = scatamp500*(lambda/500)^scatpow500` scattering model
+* bug fixes in `rbaddnoise` (shot-noise scaling, complex data), MWT reconstruction,
+  line-source wide-field sources on macOS/Windows and `rbfemmatrix` output handling
+* a unit test suite (`test/run_redbird_test.m`, 176 tests including MC forward tests)
+  running on Octave and MATLAB in GitHub Actions
+
+The detailed updates can be found in [ChangeLog.txt](ChangeLog.txt).
+
+---
 
 ## Introduction
 

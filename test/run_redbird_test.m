@@ -24,6 +24,10 @@ function run_redbird_test(tests)
 %         'solver'  : rbreginv regularization-strength behavior
 %         'recon'   : reconstruction smoke test, multi-iter residual behavior
 %                     (rbrunrecon, requires iso2mesh)
+%         'ratio'   : ratiometric (recon.isratio) reconstruction reproduces the
+%                     absolute-data reconstruction (requires iso2mesh)
+%         'mc'      : Monte Carlo forward solvers in rbrunforward (cfg.nphoton,
+%                     requires iso2mesh, and mmclab and/or mcxlab with a device)
 %
 % author: Qianqian Fang (q.fang <at> neu.edu)
 %
@@ -34,7 +38,7 @@ function run_redbird_test(tests)
 %
 
 if (nargin == 0)
-    tests = {'util', 'jac', 'prop', 'mesh', 'forward', 'solver', 'recon', 'mwt', 'td', 'sd'};
+    tests = {'util', 'jac', 'prop', 'mesh', 'forward', 'solver', 'recon', 'mwt', 'td', 'sd', 'ratio', 'mc'};
 end
 
 global RB_FAIL RB_TOTAL
@@ -101,6 +105,20 @@ end
 if (ismember('sd', tests))
     fprintf(1, '%s\nSource-detector coupling coefficient estimation\n%s\n', bar, bar);
     test_sd();
+end
+
+if (ismember('ratio', tests) && exist('meshabox', 'file'))
+    fprintf(1, '%s\nRatiometric reconstruction (recon.isratio)\n%s\n', bar, bar);
+    test_ratio();
+elseif ismember('ratio', tests)
+    fprintf(2, '[skip] ''ratio'' requires iso2mesh\n');
+end
+
+if (ismember('mc', tests) && exist('meshabox', 'file') && (exist('mmclab', 'file') || exist('mcxlab', 'file')))
+    fprintf(1, '%s\nMonte Carlo forward solvers (mmclab/mcxlab)\n%s\n', bar, bar);
+    test_mc();
+elseif ismember('mc', tests)
+    fprintf(2, '[skip] ''mc'' requires iso2mesh and mmclab or mcxlab\n');
 end
 
 fprintf(1, '%s\n', bar);
@@ -1125,3 +1143,91 @@ test_redbird('SD reduces the residual by > 2x', ...
              @(r) r(end, 1) < 0.5 * r(1, 1), true, resid);
 test_redbird('SD coefficients pinned at mean 1', ...
              @(x) abs(mean(x) - 1) < 1e-9, true, newrecon.sd);
+
+% =========================================================================
+function test_ratio()
+
+% reconstructing from I/I0 with recon.isratio=1 must reproduce the
+% reconstruction from the absolute data I when the baseline model equals I0
+% (same check as test_isratio.m, on a homogeneous perturbation-free mesh pair)
+G = struct;
+[G.node, ~, G.elem] = meshabox([0 0 0], [60 40 30], 6);
+G.srcpos = [20 20 0; 40 20 0];
+G.srcdir = [0 0 1];
+G.detpos = [20 20 30; 40 20 30];
+G.detdir = [0 0 -1];
+R = struct;
+[R.node, ~, R.elem] = meshabox([0 0 0], [60 40 30], 15);
+R.elem = R.elem(:, 1:4);
+[R.mapid, R.mapweight] = tsearchn(R.node, R.elem, G.node);
+
+cfgp = ratio_cfg(G, 12);                 % "measured": hbo raised from 10 to 12
+detphi_pert = rbrun(cfgp);
+sd = rbsdmap(ratio_cfg(G, 10));
+
+for reform = {'real', 'logphase'}
+    rf = reform{1};
+    detphi_base = rbrun(ratio_cfg(G, 10));
+    ratio = containers.Map();
+    for w = detphi_pert.keys
+        ratio(w{1}) = detphi_pert(w{1}) ./ detphi_base(w{1});
+    end
+    abs_rec = rbrun(ratio_cfg(G, 10), ratio_recon(R), containers.Map(detphi_pert.keys, detphi_pert.values), sd, ...
+                    'mode', 'image', 'maxiter', 1, 'lambda', 1e-2, 'reform', rf, 'report', 0);
+    reconr = ratio_recon(R);
+    reconr.isratio = 1;
+    rat_rec = rbrun(ratio_cfg(G, 10), reconr, ratio, sd, ...
+                    'mode', 'image', 'maxiter', 1, 'lambda', 1e-2, 'reform', rf, 'report', 0);
+    test_redbird(sprintf('isratio matches absolute recon (%s)', rf), ...
+                 @(d) max(abs(d(:, 1) - d(:, 2))) <= 1e-3 * max(abs(d(:, 1) - 10)) + 1e-8, true, ...
+                 [abs_rec.param.hbo(:), rat_rec.param.hbo(:)]);
+end
+
+function cfg = ratio_cfg(G, hbo)
+cfg.node = G.node;
+cfg.elem = [G.elem(:, 1:4), ones(size(G.elem, 1), 1)];
+cfg.seg = cfg.elem(:, 5);
+cfg.srcpos = G.srcpos;
+cfg.srcdir = G.srcdir;
+cfg.detpos = G.detpos;
+cfg.detdir = G.detdir;
+cfg.param = struct('hbo', hbo, 'hbr', 4);
+cfg.prop = containers.Map({'690', '830'}, {[0 0 1 1; 0 1 0 1.37], [0 0 1 1; 0 0.8 0 1.37]});
+cfg.omega = 0;
+cfg = rbmeshprep(cfg);
+
+function recon = ratio_recon(R)
+recon.node = R.node;
+recon.elem = R.elem;
+recon.mapid = R.mapid;
+recon.mapweight = R.mapweight;
+recon.bulk = struct('hbo', 10, 'hbr', 4);
+recon.param = struct('hbo', 10, 'hbr', 4);
+recon.prop = containers.Map({'690', '830'}, {[], []});
+
+% =========================================================================
+function test_mc()
+
+% the MC forward path (cfg.nphoton) must agree with the FEM diffusion solver
+% on the relative decay of the detected fluence with distance
+cfg = struct;
+[cfg.node, cfg.face, cfg.elem] = meshabox([0 0 0], [40 40 20], 4);
+cfg.seg = ones(size(cfg.elem, 1), 1);
+cfg.srcpos = [20 20 0];
+cfg.srcdir = [0 0 1];
+cfg.detpos = [25 20 0; 32 20 0];
+cfg.detdir = [0 0 1];
+cfg.prop = [0 0 1 1; 0.01 1 0 1.37];
+cfg.omega = 0;
+cfg = rbmeshprep(cfg);
+fem = rbrunforward(cfg);
+
+if (exist('mmclab', 'file'))
+    cfgmc = cfg;
+    cfgmc.nphoton = 1e6;
+    mc = rbrunforward(cfgmc);
+    test_redbird('mmclab detphi is finite and positive', @(x) all(isfinite(x(:)) & x(:) > 0), true, mc);
+    test_redbird('mmclab and FEM agree on detphi decay within 30%', ...
+                 @(r) abs(r - 1) < 0.3, true, (mc(2) / mc(1)) / (fem(2) / fem(1)));
+end
+

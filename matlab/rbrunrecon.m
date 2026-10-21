@@ -352,12 +352,12 @@ for iter = 1:maxiter
     end
 
     % build Jacobians on forward mesh
-    if isa(cfg.omega, 'containers.Map')
-        omegas = cell2mat(cfg.omega.values);
-    elseif (isfield(cfg, 'omega'))
-        omegas = cfg.omega;
-    else
+    if (~isfield(cfg, 'omega') || isempty(cfg.omega))
         omegas = 0;
+    elseif isa(cfg.omega, 'containers.Map')
+        omegas = cell2mat(cfg.omega.values);
+    else
+        omegas = cfg.omega;
     end
 
     % ---- voxel-grid (mcxlab) Jacobian: route through LSQR -------------

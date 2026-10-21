@@ -167,12 +167,12 @@ if (isfield(cfg, 'nphoton'))
                 cfg.detdir(:, 4) = 0;
             end
 
-            if (isa(cfg.omega, 'containers.Map'))
-                omegas_local = cell2mat(cfg.omega.values);
-            elseif (isfield(cfg, 'omega'))
-                omegas_local = cfg.omega;
-            else
+            if (~isfield(cfg, 'omega') || isempty(cfg.omega))
                 omegas_local = 0;
+            elseif (isa(cfg.omega, 'containers.Map'))
+                omegas_local = cell2mat(cfg.omega.values);
+            else
+                omegas_local = cfg.omega;
             end
             is_rf_mc = any(omegas_local > 0);
 
@@ -246,7 +246,18 @@ if (isfield(cfg, 'nphoton'))
                 % keep as double - mmclab.cpp's parser reads via mxGetPr
                 cfg.nodemua    = double(cfg.prop(:, 1));
                 cfg.isnodalmua = 1;
-                if (isfield(cfg, 'omega') && cfg.omega > 0)
+                if (isfield(cfg, 'omega') && ~isempty(cfg.omega))
+                    if (isa(cfg.omega, 'containers.Map') && isKey(cfg.omega, wv))
+                        omegawv = cfg.omega(wv);
+                    elseif (isa(cfg.omega, 'containers.Map'))
+                        omegawv = cell2mat(cfg.omega.values);
+                    else
+                        omegawv = cfg.omega;
+                    end
+                else
+                    omegawv = 0;
+                end
+                if (any(omegawv > 0))
                     cfg.nodemusp    = double(cfg.prop(:, 2));
                     cfg.isnodalmusp = 1;
                 end

@@ -4,7 +4,7 @@
 
 * **Copyright**: (C) Qianqian Fang (2005–2026) \<q.fang at neu.edu>, Edward Xu (2024) \<xu.ed at northeastern.edu>
 * **License**: GNU Public License V3 or later
-* **Version**: 0.6.0 (v2026, CODENAME_TBD)
+* **Version**: 0.8.0 (v2026, Summer Tanager)
 * **GitHub**: [https://github.com/fangq/redbird](https://github.com/fangq/redbird)
 * **Acknowledgement**: This project is supported by the US National Institute of Health (NIH)
   grant [R01-CA204443](https://reporter.nih.gov/project-details/10982160)
@@ -32,7 +32,7 @@
 
 ## What's New
 
-Redbird v0.6.0 (v2026) is bundled with the MCX/MCX-CL/MMC v2026 (3.0) release. It adds
+Redbird v0.8.0 (v2026, Summer Tanager) is bundled with the MCX/MCX-CL/MMC v2026 (3.0) release. It adds
 Monte Carlo forward solvers, two new imaging modalities and a unit test suite:
 
 * **Monte Carlo forward solvers**: setting `cfg.nphoton` in `rbrunforward` runs `mmclab`

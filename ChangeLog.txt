@@ -1,6 +1,6 @@
 Change Log
 
-== Redbird 0.6.0 (v2026, CODENAME_TBD), Qianqian Fang <q.fang at neu.edu> ==
+== Redbird 0.8.0 (v2026, Summer Tanager), Qianqian Fang <q.fang at neu.edu> ==
 
  2026-10-21 [d0cf2ff] [release] bump version to 0.6.0 (v2026), add What's New, fix duplicated TOC entry
  2026-10-21 [32edf08] [ci] update actions/checkout to v4

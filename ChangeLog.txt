@@ -1,0 +1,43 @@
+Change Log
+
+== Redbird 0.6.0 (v2026, CODENAME_TBD), Qianqian Fang <q.fang at neu.edu> ==
+
+ 2026-10-21 [d0cf2ff] [release] bump version to 0.6.0 (v2026), add What's New, fix duplicated TOC entry
+ 2026-10-21 [32edf08] [ci] update actions/checkout to v4
+ 2026-10-21 [65c109c] [test] add ratiometric (recon.isratio) and Monte Carlo forward test groups
+ 2026-10-21 [00cd15d] [bug] tolerate a missing, empty or containers.Map cfg.omega in the MC forward/recon paths
+ 2026-10-21 [937fd8a] [bug] add missing voxel-grid helpers used by rbrunforward and mcx recon demos
+ 2026-09-23 [fb1ef8f] [bug] rbfemmatrix no longer writes through unset outputs when nlhs is small
+ 2026-09-01 [6d2b012] [doc] drop the stale Redbird-m name from file headers
+ 2026-09-01 [759a4cd] [bug] fix rbaddnoise shot-noise scaling and complex-data noise model
+ 2026-07-21 [b4c97ef] [feat] simultaneous source-detector coupling estimation + logphase wrap fix, w/ Claude code
+ 2026-07-21 [15a73c5] [bug] fix MWT recon: detphi sign flip and single-frequency Map unwrapping, w/ Claude code
+ 2026-07-14 [1fa1d9d] [bug] fix all-zero line-source widesrc on macos/windows, fail CI on test failures, w/ Claude code
+ 2026-06-11 [133e520] [feat] add recon.isratio for differential (ratiometric) fNIRS reconstruction
+ 2026-05-21 [a439923] [demo] add additional demo scripts comparing mcx/mmc based recon
+ 2026-05-20 [a889394] [demo] lower photon number for demo script
+ 2026-05-20 [b289a56] [bug] rbgetoptodes multi-source srcpos + CW outputtype + two-stage recon demos, w/ Claude code
+ 2026-05-14 [1e7a1f4] [feat] mcxlab voxel-grid adjoint Jacobian + matrix-free LSQR recon, w/ Claude code
+ 2026-05-13 [8a3a3af] [example] add mmclab forward + Jacobian demos for the MC integration trio, w/ Claude code
+ 2026-05-13 [2694c43] [feat] rbrunforward: batched mmclab call + lift RF-with-Jext error, w/ Claude code
+ 2026-05-13 [ee22561] [bug] rbrunforward mmclab branch: per-source loop + double-precision nodemua, w/ Claude code
+ 2026-05-13 [f6e59ed] [feat] MC-based DOT recon: per-node prop auto-detect + detdir autofill + demo, w/ Claude code
+ 2026-05-12 [1dd4136] [feat] rbrunrecon consumes Jext from rbrunforward to skip rbjac, w/ Claude code
+ 2026-05-12 [403a6d9] [feat] mmclab branch in rbrunforward returns adjoint Jacobian when requested, w/ Claude code
+ 2026-05-11 [c583d77] [feat] expand rbfemmatrix mex to support MWT/Helmholtz forward+inverse
+ 2026-05-10 [3712e59] [feat] add expoentially distributed ray source type
+ 2026-05-09 [38ae112] [feat] support line-source type 'line'
+ 2026-05-08 [4635cc2] [ci] fix Octave 10+ shape mismatch in rbsdmap setdiff result
+ 2026-05-08 [ab89540] [example] add Redbird TD vs mmclab Monte Carlo validation script
+ 2026-05-08 [afe82fd] [feat] add time-domain DOT forward solver via Crank-Nicolson
+ 2026-05-07 [b6489ba] [feat] add MWT (Helmholtz + Bayliss-Turkel RBC) forward+inverse support
+ 2026-05-07 [6e5d80b] [ci] fix Octave 8.4 containers.Map crash on empty-string key
+ 2026-05-06 [d225e46] [ci] fix octave 8.4 ci error
+ 2026-05-06 [2220a33] [ci] debug addpath
+ 2026-05-06 [84a9846] [ci] test addpath
+ 2026-05-06 [2353278] [test] format test script, addpath in ci script
+ 2026-05-06 [e28ed9c] [ci] avoid genpath when adding iso2mesh
+ 2026-05-06 [22217ed] [test] add unit test suite and GitHub Actions CI
+ 2026-05-06 [5ce2913] [format] reformat demo scripts
+ 2026-05-06 [af30773] [feat] support musp=scatamp500*(lamda/500)^scatpow500 model
+ 2026-02-01 [6f91c67] [demo] fix mergemesh output column resize

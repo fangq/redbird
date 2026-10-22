@@ -79,7 +79,7 @@ Ny_p = by * ceil(Ny / by);
 Nz_p = bz * ceil(Nz / bz);
 
 if (Nx_p ~= Nx || Ny_p ~= Ny || Nz_p ~= Nz)
-    J_pad = zeros(Nx_p, Ny_p, Nz_p, Nsd, 'like', J);
+    J_pad = zeros(Nx_p, Ny_p, Nz_p, Nsd, class(J));  % 'like' is not supported by Octave < 7
     J_pad(1:Nx, 1:Ny, 1:Nz, :) = J;
 else
     J_pad = J;

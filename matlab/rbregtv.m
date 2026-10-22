@@ -239,6 +239,11 @@ function u = tv_prox_iso3d(z, lambda, niter)
 % Dual variables p = (p1, p2, p3); after the iterations,
 %   u = z - lambda * div(p).
 
+if (lambda <= 0)   % no TV penalty: the proximal operator is the identity
+    u = z;
+    return
+end
+
 sz = size(z);
 p1 = zeros(sz);
 p2 = zeros(sz);
@@ -269,7 +274,8 @@ end
 function v = tv_iso3d_value(x)
 % Isotropic TV value (used for objective history).
 [g1, g2, g3] = grad3d(x);
-v = sum(sqrt(g1 .* g1 + g2 .* g2 + g3 .* g3), 'all');
+v = sqrt(g1 .* g1 + g2 .* g2 + g3 .* g3);
+v = sum(v(:));   % sum(..., 'all') is not supported by Octave < 7
 end
 
 function [g1, g2, g3] = grad3d(x)

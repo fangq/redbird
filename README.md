@@ -20,7 +20,7 @@
 - [Redbird Function Overview](#redbird-function-overview)
 - [Data Structures](#data-structures)
   - [Forward Data Structure `cfg`](#forward-data-structure-cfg)
-  - [Inverse Data Structure `recon`](#inverse-data-structure-cfg)
+  - [Inverse Data Structure `recon`](#inverse-data-structure-recon)
 - [How to Use](#how-to-use)
   - [Streamlined Forward and Inverse Solvers](#streamlined-forward-and-inverse-solvers)
     - [rbrun](#rbrun)
@@ -46,11 +46,16 @@ Monte Carlo forward solvers, two new imaging modalities and a unit test suite:
 * **microwave tomography (MWT)**: Helmholtz forward and inverse solvers with the
   Bayliss-Turkel radiation boundary condition, accelerated by the `rbfemmatrix` mex
 * **ratiometric (differential) fNIRS reconstruction** via `recon.isratio`
-* simultaneous source-detector coupling coefficient estimation (`recon.sdcoupling`)
+* simultaneous source-detector coupling coefficient estimation (`recon.sdcoupling`,
+  `rbsdjac`)
+* total-variation (TV) regularized reconstruction (`rbregtv`, FISTA with a Chambolle TV
+  proximal step and an optional positivity constraint), and coarse-basis Jacobian
+  binning/upsampling (`rbbinjac`/`rbupsample`) for large voxel-grid Monte Carlo Jacobians
 * line and exponentially distributed ray sources, and the
   `musp = scatamp500*(lambda/500)^scatpow500` scattering model
 * bug fixes in `rbaddnoise` (shot-noise scaling, complex data), MWT reconstruction,
-  line-source wide-field sources on macOS/Windows and `rbfemmatrix` output handling
+  line-source wide-field sources on macOS/Windows and `rbfemmatrix` output handling;
+  `rbbinjac`/`rbregtv` now run on Octave 6
 * a unit test suite (`test/run_redbird_test.m`, 176 tests including MC forward tests)
   running on Octave and MATLAB in GitHub Actions
 
@@ -125,7 +130,7 @@ Redbird supports four types of image reconstructions:
 
 
 Redbird functions are roughly divided into the following types, identified by the following prefixes:
-- <font color=green>`rbrun*`</font> - "driver functions" that automatesa complex process, such as `rbrun()` for both forward/inverse solvers, or `rbrunforward()` and `rbrunrecon()`
+- <font color=green>`rbrun*`</font> - "driver functions" that automate a complex process, such as `rbrun()` for both forward/inverse solvers, or `rbrunforward()` and `rbrunrecon()`
 - <font color=green>`rbfem*`</font> - FEM forward functions
 - <font color=green>`rbjac*`</font> - functions related to building Jacobians
 - <font color=green>`rbreginv*`</font> - functions related to building and regularizing the inverse equation
@@ -144,6 +149,7 @@ Specifically, the main Redbird functions are divided into the following groups
       - `rbfemmatrix.h/.c` - (optional) mex file for building the FEM forward matrix (fast), can be built using `mex rbfemmatrix.cpp` in MATLAB/Octave
       - `rbdeldotdel` - computing the quadratic term in the FEM equation
       - `rbsrc2bc` - converting wide-field source into the RHS vector
+      - `rbruntd` - Crank-Nicolson time-domain forward solver
   - Pre and post-processing
       - `rbmeshprep` - mesh data preprocessing before forward modeling
       - `rbaddnoise` - add shot-noise or thermal noise to the simulated data
@@ -160,12 +166,18 @@ Specifically, the main Redbird functions are divided into the following groups
     - `rbjacscatpow` - multi-spectral Jacobian for scattering power
     - `rbmultispectral` - combining all multi-spectral Jacobians into a single equation
     - `rbjacnode` - convert from element-based Jacobian to node-based Jacobian
+    - `rbsdjac` - Jacobian of the measurements with respect to the source/detector coupling coefficients
+    - `rbjacop` - wrap a voxel-grid (Monte Carlo) Jacobian as a matrix-free operator
+    - `rbbinjac`/`rbupsample` - bin a voxel-grid Jacobian into a coarse basis, and map the update back
+    - `rbvoxelmean` - average a voxel-grid field around the optode positions
   - Solving and regularizing inverse equation
     - `rbreginv` - solving the Gauss-Newton Normal Equation with regularization
     - `rbreginvover` - solving the normal equation for over-determined system
     - `rbreginvunder` - solving the normal equation for under-determined system
     - `rbprior` - build the L^TL regularization matrix
-    - `rbregemperical` - compute the emperical regularization factor
+    - `rbregemperical` - compute the empirical regularization factor
+    - `rbreglsqr` - matrix-free LSQR solver with Tikhonov damping for large Jacobians
+    - `rbregtv` - total-variation regularized solver (FISTA)
     - `rbcreateinv` - transform the inverse equation between 3 types
     - `rbmatreform` - transform the inverse matrix between 3 types
     - `rbmatflat` - combining multi-wavelength Jacobians into a flat matrix
@@ -274,7 +286,7 @@ If the 3rd input is a struct that resembles a forward cfg data structure,
 newrecon = rbrun(cfg, recon, cfg0);
 ```
 this performs a streamlined forward-simulation using `cfg0`, immediately followed by
-a reconstruction using `cfg` and `recon`. This is equivallent to 
+a reconstruction using `cfg` and `recon`. This is equivalent to 
 ```
 detphi0 = rbrunforward(cfg0);
 newrecon = rbrunrecon(cfg, recon, detphi0);

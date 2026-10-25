@@ -85,7 +85,8 @@ addpath('/path/to/redbird/matlab')
 
 Replace `/path/to/redbird/matlab` with the actual unzipped folder path.
 
-Although Redbird implements all core functionalities in native MATLAB code for portability, it includes a C-based MEX file, `rbfemmatrix.cpp`, to accelerate FE matrix and Jacobian computations. Precompiled `.mex` files are included for Linux, Windows, and macOS.
+Although Redbird implements all core functionalities in native MATLAB code for portability, it includes a C-based MEX file, `rbfemmatrix.cpp`, to accelerate FE matrix and Jacobian computations. A precompiled `rbfemmatrix.mex` (Octave on Linux) is included in the repository; on other platforms,
+please rebuild it as shown below.
 
 To rebuild the MEX file manually:
 
@@ -93,7 +94,11 @@ To rebuild the MEX file manually:
 mex rbfemmatrix.cpp
 ```
 
-Or run `make mex` in the `redbird/matlab` folder using a terminal.
+Or run `make mex` (MATLAB) or `make oct` (Octave) in the `redbird/matlab` folder using a terminal.
+
+The optional Monte Carlo forward solvers (`cfg.nphoton`) require `mmclab` (for meshes) or
+`mcxlab` (for voxel grids) in the MATLAB/Octave search path; both are included in the
+MCX/MMC v2026 release packages, which also bundle Redbird.
 
 Redbird accepts tetrahedral mesh data from any mesh generator, but it integrates particularly well with our **iso2mesh toolbox**: [https://iso2mesh.sf.net](https://iso2mesh.sf.net). All scripts in the `example/` folder require iso2mesh.
 
@@ -221,6 +226,8 @@ The `rbrunforward()` function takes in most of the simulation settings via the `
 - `cfg.detpattern`*: arrays of pattern source data (3D array: Nx*Ny*Npat)
 - `cfg.bulk`: bulk optical property
 - `cfg.omega`: frequency-domain system modulation (angular) frequency in rad
+- `cfg.nphoton`: if set, `rbrunforward` runs a Monte Carlo forward simulation (via `mmclab` for a mesh, or `mcxlab` for a volume) instead of the FEM solver
+- `cfg.vol`: a voxel-grid label volume, used with `cfg.nphoton` to run `mcxlab`
 
 properties marked with "*" share nearly identical definitions as in MMC (if exist, also in MCX).
 

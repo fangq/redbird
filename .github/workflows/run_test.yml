@@ -63,9 +63,18 @@ jobs:
           git clone --depth 1 https://github.com/fangq/iso2mesh.git iso2mesh
           git clone --depth 1 https://github.com/fangq/jsonlab.git jsonlab
       - name: Set up MATLAB
+        if: ${{ matrix.os != 'macos-14' }}
         uses: matlab-actions/setup-matlab@v2
         with:
           release: R2022a
+      # macos-14 is Apple silicon: R2022a only runs there as Intel code under
+      # Rosetta 2, which gave intermittent bogus "invalid index" errors; R2023b
+      # is the first native (maca64) release
+      - name: Set up MATLAB (Apple silicon)
+        if: ${{ matrix.os == 'macos-14' }}
+        uses: matlab-actions/setup-matlab@v2
+        with:
+          release: R2023b
       - name: Run MATLAB tests
         uses: matlab-actions/run-command@v2
         with:

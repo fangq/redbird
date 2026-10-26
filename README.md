@@ -39,8 +39,11 @@ Monte Carlo forward solvers, two new imaging modalities and a unit test suite:
   (when `cfg.node`/`cfg.elem` are given) or `mcxlab` (when `cfg.vol` is given) in place of
   the FEM diffusion solver; mmclab returns the mesh-space adjoint Jacobian (`Jext`) that
   `rbrunrecon` consumes directly, and mcxlab returns a voxel-grid adjoint Jacobian that is
-  inverted by a matrix-free LSQR solver (`rbreglsqr`/`rbjacop`); per-node optical
-  properties are detected automatically for MC-based DOT reconstruction
+  inverted by a matrix-free LSQR solver (`rbreglsqr`/`rbjacop`); with an `sd` table
+  (`rbrunforward(cfg, 'sd', sd)`, as `rbrunrecon` passes), only its active channels are
+  computed (`rbsd2sdmap` builds mcxlab/mmclab's `cfg.sdmap`), so the Jacobian rows match
+  `rbjac` and the data; per-node optical properties are detected automatically for
+  MC-based DOT reconstruction
 * **time-domain DOT**: a Crank-Nicolson time-domain forward solver (`rbruntd`), validated
   against mmclab
 * **microwave tomography (MWT)**: Helmholtz forward and inverse solvers with the

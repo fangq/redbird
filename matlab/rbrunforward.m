@@ -122,6 +122,12 @@ if (isfield(cfg, 'nphoton'))
 
     needJacobian = (nargout > 5);
     avgsize = jsonopt('avgsize', 1, opt);
+    % with an sd table, the adjoint Jacobian is computed only for its active
+    % channels (cfg.sdmap), in its row order, matching rbjac and the data
+    sdin = [];
+    if (needJacobian && isfield(opt, 'sd') && ~isempty(opt.sd))
+        sdin = opt.sd;
+    end
     srcnum  = size(cfg.srcpos, 1);
     detnum  = size(cfg.detpos, 1);
     if (size(cfg.detpos, 2) == 3)
@@ -279,6 +285,10 @@ if (isfield(cfg, 'nphoton'))
                 cfg.flog = 0;
             end
 
+            if (~isempty(sdin))
+                cfg.sdmap = rbsd2sdmap(cfg, rbsdwave(sdin, wv), 1);
+            end
+
             out = mmclab(cfg);
 
             % Single batched call: mmclab built srcdata with Ns forward slots
@@ -300,8 +310,9 @@ if (isfield(cfg, 'nphoton'))
             end
 
             if (needJacobian)
-                % out.jmua and out.jd are [nn, Ns*Nd] single (complex when RF);
-                % transpose into rbjac's [Nsd x Nn] convention. CW mode runs
+                % out.jmua and out.jd are [nn, Nch] single (complex when RF),
+                % Nch = Ns*Nd, or the active rows of sd (cfg.sdmap); transpose
+                % into rbjac's [Nsd x Nn] convention. CW mode runs
                 % outputtype='adjoint' which only produces J_mua (no out.jd).
                 Jmua_wv = double(out.jmua).';
                 if (isfield(out, 'jd') && ~isempty(out.jd))
@@ -358,9 +369,10 @@ if (isfield(cfg, 'nphoton'))
 
         if (needJacobian)
             % adjoint Jacobian path -> mcxlab returns J_mua as a
-            % (Nx,Ny,Nz,Ns*Nd) 4D array.  Voxel J is too large for the
-            % normal-equation form; rbrunrecon will route through
-            % rbreglsqr (matrix-free LSQR) downstream.
+            % (Nx,Ny,Nz,Nch) 4D array, Nch = Ns*Nd or the active rows of
+            % sd.  Voxel J is too large for the normal-equation form;
+            % rbrunrecon will route through rbreglsqr (matrix-free LSQR)
+            % downstream.
             %
             % outputtype='adjoint' computes ONLY J_mua (mcx applies its
             % native -Vvox scaling and exposes the result in out.jmua).
@@ -381,6 +393,9 @@ if (isfield(cfg, 'nphoton'))
             end
             cfg.srcid      = -1;
             cfg.outputtype = 'adjoint';
+            if (~isempty(sdin))
+                [cfg.sdmap, sdidx] = rbsd2sdmap(cfg, rbsdwave(sdin, ''), 1);
+            end
         elseif (isfield(cfg, 'detdir') && ~isempty(cfg.detdir))
             % forward only, but user provided detdir: simulate detectors as
             % adjoint sources too (phi gets Ns+Nd slots) without computing J
@@ -407,10 +422,15 @@ if (isfield(cfg, 'nphoton'))
 
         if (needJacobian)
             % out.jmua and out.jd are 4D voxel Jacobians of shape
-            % (Nx,Ny,Nz,Ns*Nd) -- one volume per source-detector pair.
+            % (Nx,Ny,Nz,Nch) -- one volume per source-detector pair, Nch = Ns*Nd,
+            % or the active rows of sd; Jext.sdidx then locates each channel
+            % in detphi(:)
             Jext = struct('mua',    double(out.jmua));
             if (isfield(out, 'jd'))
                 Jext.dcoeff = double(out.jd);
+            end
+            if (exist('sdidx', 'var'))
+                Jext.sdidx = sdidx;
             end
         end
 
@@ -520,4 +540,18 @@ end
 if (length(rfcw) == 1)
     phi = phi(rfcw).phi;
     detval = detval(rfcw).detphi;
+end
+
+% --------------------------------------------------------------------------
+function sd = rbsdwave(sd, wv)
+% the sd table of wavelength wv, or the only one, from an sd array or containers.Map
+if (isa(sd, 'containers.Map'))
+    if (isKey(sd, wv))
+        sd = sd(wv);
+    elseif (sd.Count == 1)
+        sd = sd.values;
+        sd = sd{1};
+    else
+        error('rbrunforward: sd has no table for wavelength %s', wv);
+    end
 end

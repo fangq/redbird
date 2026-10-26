@@ -363,8 +363,8 @@ for iter = 1:maxiter
     % ---- voxel-grid (mcxlab) Jacobian: route through LSQR -------------
     %
     % When rbrunforward's mcxlab branch returned Jext.mua as a 4D array
-    % (Nx, Ny, Nz, Ns*Nd), the Jacobian is too large for the normal-
-    % equation form (J'*J is Nv x Nv).  Use rbreglsqr (matrix-free LSQR
+    % (Nx, Ny, Nz, Nch), Nch = Ns*Nd or the active rows of sd, the Jacobian
+    % is too large for the normal-equation form (J'*J is Nv x Nv).  Use rbreglsqr (matrix-free LSQR
     % with early stopping) to solve J*delta_mu = (detphi0 - detphi)
     % directly and write the voxel update back to cfg.muavol (or
     % cfg.prop, depending on the user's parameterization).
@@ -372,6 +372,9 @@ for iter = 1:maxiter
         isnumeric(Jext.mua) && ndims(Jext.mua) >= 4)
 
         rvec = detphi0(:) - detphi(:);
+        if (isfield(Jext, 'sdidx'))
+            rvec = rvec(Jext.sdidx);   % the channels of sd, as Jext.mua holds
+        end
         lsqr_maxit = jsonopt('lsqrmaxit', 100, opt);
         lsqr_tol   = jsonopt('lsqrtol',   1e-6, opt);
         [delta_mu_vol, lsqr_info] = rbreglsqr(Jext.mua, rvec, ...

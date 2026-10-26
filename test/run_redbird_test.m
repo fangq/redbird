@@ -1073,7 +1073,7 @@ Al = rbsdjac(sdtab, {''}, model, 2 * csd, 1:4, 'logphase', 'y');
 test_redbird('rbsdjac logphase amp block = 1/|c|', @() Al(1, 1), 0.5);
 test_redbird('rbsdjac logphase phase block = 1', @() Al(5, 5), 1);
 test_redbird('rbsdjac logphase cross blocks are zero', ...
-             @() max(max(abs(Al(1:4, 5:8))) , max(abs(Al(5:8, 1:4)))), [0 0 0 0]);
+             @() max(max(abs(Al(1:4, 5:8))), max(abs(Al(5:8, 1:4)))), [0 0 0 0]);
 As = rbsdjac(sdtab, {''}, model, csd, 1:4, 'real', 's');
 test_redbird('rbsdjac source-only mode skips det columns', @() max(abs(As(:, 3))), 0);
 % shared channels (MWT antennas): source k and detector k are one channel
@@ -1209,9 +1209,10 @@ recon.prop = containers.Map({'690', '830'}, {[], []});
 function test_mc()
 
 % the MC forward path (cfg.nphoton) must agree with the FEM diffusion solver
-% on the relative decay of the detected fluence with distance
+% on the relative decay of the detected fluence with distance; a 4 mm mesh
+% is too coarse for the FEM fluence 5 mm from the source (decay ratio 0.7)
 cfg = struct;
-[cfg.node, cfg.face, cfg.elem] = meshabox([0 0 0], [40 40 20], 4);
+[cfg.node, cfg.face, cfg.elem] = meshabox([0 0 0], [40 40 20], 2);
 cfg.seg = ones(size(cfg.elem, 1), 1);
 cfg.srcpos = [20 20 0];
 cfg.srcdir = [0 0 1];
@@ -1229,5 +1230,21 @@ if (exist('mmclab', 'file'))
     test_redbird('mmclab detphi is finite and positive', @(x) all(isfinite(x(:)) & x(:) > 0), true, mc);
     test_redbird('mmclab and FEM agree on detphi decay within 30%', ...
                  @(r) abs(r - 1) < 0.3, true, (mc(2) / mc(1)) / (fem(2) / fem(1)));
-end
 
+    % with an sd table, the MC Jacobian holds only its active rows (cfg.sdmap),
+    % as rbjac does; the adjoint Jacobian needs a GPU backend of mmclab
+    cfgmc.detdir = [0 0 1; 0 0 1];
+    cfgmc.nphoton = 3e5;
+    sd = rbsdmap(cfgmc);
+    sd(1, 3) = 0;
+    try
+        [~, ~, ~, ~, ~, Jfull] = rbrunforward(cfgmc);
+        [~, ~, ~, ~, ~, Jsd] = rbrunforward(cfgmc, 'sd', sd);
+        test_redbird('mmclab Jacobian rows follow the active sd rows', @(x) x, [1 2], ...
+                     [size(Jsd.mua, 1), size(Jfull.mua, 1)]);
+        test_redbird('mmclab sd-row Jacobian matches the full Jacobian row', ...
+                     @(x) x < 0.05, true, norm(Jsd.mua(1, :) - Jfull.mua(2, :)) / norm(Jfull.mua(2, :)));
+    catch err
+        fprintf(1, 'skip the MC Jacobian test: %s\n', err.message);
+    end
+end

@@ -2,6 +2,12 @@ Change Log
 
 == Redbird 0.8.0 (v2026, Summer Tanager), Qianqian Fang <q.fang at neu.edu> ==
 
+ 2026-10-25 [e5eac72] [doc] README: MC forward fields, mex availability, make oct
+ 2026-10-22 [46ec2e0] [doc] list the TV, binning and coupling Jacobian functions in the README, fix typos
+ 2026-10-22 [1753e4d] [bug] rbregtv: return the input when alpha=0 instead of NaN, drop sum(...,'all') for Octave 6
+ 2026-10-22 [8022615] [bug] rbbinjac: allocate with class() instead of zeros(...,'like'), unsupported by Octave < 7
+ 2026-10-21 [6ec03e7] [release] set the v2026 release to 0.8.0 (Summer Tanager)
+ 2026-10-21 [72b4106] [doc] add ChangeLog.txt
  2026-10-21 [d0cf2ff] [release] bump version to 0.6.0 (v2026), add What's New, fix duplicated TOC entry
  2026-10-21 [32edf08] [ci] update actions/checkout to v4
  2026-10-21 [65c109c] [test] add ratiometric (recon.isratio) and Monte Carlo forward test groups

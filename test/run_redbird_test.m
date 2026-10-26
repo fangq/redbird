@@ -543,9 +543,15 @@ test_redbird('rbrun(cfg) == rbrunforward(cfg)', @() detphi3, detphi2);
 
 % ---- Fluence symmetry ----
 % Centered source with two detectors equidistant on opposite sides should
-% produce equal detphi values (up to mesh-asymmetry noise).
+% produce equal detphi values. An unstructured box mesh is not symmetric:
+% its tetgen layout differs between builds/platforms and moves the ratio by
+% up to ~12% at this element size, so mesh one half and mirror it at x=20.
+[no, ~, el] = meshabox([0 0 0], [20 40 20], 4);
+nom = no;
+nom(:, 1) = 40 - nom(:, 1);
+[no, el] = mergemesh(no, el(:, 1:4), nom, el(:, 1:4));
 cfgS = struct;
-[cfgS.node, cfgS.face, cfgS.elem] = meshabox([0 0 0], [40 40 20], 4);
+[cfgS.node, cfgS.elem] = removedupnodes(no, el(:, 1:4), 1e-6);
 cfgS.seg = ones(size(cfgS.elem, 1), 1);
 cfgS.srcpos = [20 20 0];
 cfgS.srcdir = [0 0 1];
@@ -555,8 +561,8 @@ cfgS.prop = [0 0 1 1; 0.01 1 0 1.37];
 cfgS.omega = 0;
 cfgS = rbmeshprep(cfgS);
 detS = rbrunforward(cfgS);
-test_redbird('forward symmetric detectors agree to ~5%', ...
-             @(r) abs(r - 1) < 0.05, true, detS(1) / detS(2));
+test_redbird('forward mirror-symmetric detectors agree', ...
+             @(r) abs(r - 1) < 1e-6, true, detS(1) / detS(2));
 
 % ---- Multi-wavelength forward ----
 % Two distinct wavelengths in cfg.prop -> output is a containers.Map with

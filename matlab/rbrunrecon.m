@@ -59,7 +59,9 @@ function [recon, resid, cfg, updates, Jmua, detphi0iter, phi] = rbrunrecon(varar
 %                iterations
 %         'reform': 'real': transform A*x=b so that A/x/b are all real
 %                   'complex': do not transform A*x=b
-%                   'logphase': transform Ax=b to [Alogamp,Aphase]*x=[log10(b),angle(b)]
+%                   'logphase': transform Ax=b to [Alogamp,Aphase]*x=
+%                   [log(|ymeas|)-log(|ymodel|); angle(ymeas)-angle(ymodel)],
+%                   with Alogamp+i*Aphase = A./ymodel (natural log)
 %         'mex': 0 (default) use matlab native code rbjac to build Jacobian
 %                1: use mex-file rbfemmatrix to rapidly compute Jacobian
 %                  on forward (dense) mesh then interpolate to coarse mesh

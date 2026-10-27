@@ -19,6 +19,9 @@ function [Jmua_n, Jmua_e, Jd_n, Jd_e] = rbjac(sd, phi, deldotdel, felem, evol, v
 %     Jmua_e: the element-wise Jacobian for absorption coeff. mua
 %     Jd_n: (optional) the nodal Jacobian for diffusion coeff D
 %     Jd_e: (optional) the element-wise Jacobian for diffusion coeff D
+%     all are dPhi/dmu = -phi_s'*(dA/dmu)*phi_d (adjoint method, see manual);
+%     Jmua is negative (increasing mua decreases the detected fluence), Jd
+%     has the same leading minus but its sign follows -grad(phi_s).grad(phi_d)
 %
 % license:
 %     GPL version 3, see LICENSE_GPLv3.txt files for details

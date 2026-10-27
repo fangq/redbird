@@ -4,7 +4,8 @@ function [finalAmat, finalrhs, nblock] = rbcreateinv(Amat, ymeas, ymodel, params
 %
 % Convert an inverse problem to the log-amplitude and unwrapped phase form
 % i.e. Amat*x=[ymeas - ymodel] =>
-% [Alogamp Aphase]*x=[log10(ymeas)-log10(ymodel);angle(ymeas)-angle(ymodel)]
+% [Alogamp Aphase]*x=[log(|ymeas|)-log(|ymodel|);angle(ymeas)-angle(ymodel)]
+% where Alogamp+i*Aphase = Amat./ymodel (natural log, row-wise)
 %
 % author: Qianqian Fang (q.fang <at> neu.edu)
 %
@@ -20,7 +21,7 @@ function [finalAmat, finalrhs, nblock] = rbcreateinv(Amat, ymeas, ymodel, params
 %                     finalrhs =[Re(ymeas-ymodel) ; Im(ymeas-ymodel)]
 %             'logphase': real-valued system,
 %                     finalAmat=see manual
-%                     finalrhs =[log10(ymeas)-log10(ymodel) ; angle(ymeas)-angle(ymodel)]
+%                     finalrhs =[log(|ymeas|)-log(|ymodel|) ; angle(ymeas)-angle(ymodel)]
 %
 % output:
 %     finalAmat: converted LHS matrix, see above

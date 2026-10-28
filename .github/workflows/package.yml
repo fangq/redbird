@@ -1,0 +1,56 @@
+name: Package redbird and redbirdpy
+
+# the redbird (MATLAB/Octave) and redbirdpy (Python) bundle that the MCX/MMC
+# release packages (mcx2026.sh) place in their MATLAB/ and Python/ folders
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - '*'
+  schedule:
+    - cron: '0 6 * * *'    # daily, to follow the redbirdpy and manual repositories
+  workflow_dispatch:
+
+env:
+  # the redbirdpy revision bundled with redbird, pin to a tag when releasing
+  REDBIRDPY_REF: main
+
+jobs:
+  package:
+    name: Zip and upload redbird
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout redbird with its manual (a submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: 'recursive'
+          path: redbird-pkg/redbird
+      - name: Checkout redbirdpy
+        run: |
+          git clone --depth 1 --branch ${{ env.REDBIRDPY_REF }} https://github.com/fangq/redbirdpy.git redbird-pkg/redbirdpy
+      - name: Zip redbird
+        run: |
+          find redbird-pkg -name .git -prune -exec rm -rf {} +
+          rm -rf redbird-pkg/*/.github redbird-pkg/*/.gitmodules
+          mkdir -p packages
+          (cd redbird-pkg && zip -FSr --symlink ../packages/redbird-github-latest.zip redbird redbirdpy)
+          unzip -l packages/redbird-github-latest.zip | tail -1
+      - name: Upload redbird package
+        uses: actions/upload-artifact@v4
+        with:
+          name: redbird-package
+          path: packages/redbird-github-latest.zip
+      - name: Copy package to server
+        # needs the MCX_SERVER, MCX_SERVER_USER, MCX_SERVER_SSH_KEY and MCX_CI_PATH
+        # secrets, the same as the mcx and mmc repositories
+        if: ${{ env.HAS_SERVER == 'true' && github.repository_owner == 'fangq' && github.event_name != 'pull_request' }}
+        env:
+          HAS_SERVER: ${{ secrets.MCX_SERVER_SSH_KEY != '' }}
+        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+        with:
+          server: ${{ secrets.MCX_SERVER }}
+          username: ${{ secrets.MCX_SERVER_USER }}
+          ssh_private_key: ${{ secrets.MCX_SERVER_SSH_KEY }}
+          local_path: "packages/*"
+          remote_path: ${{ secrets.MCX_CI_PATH }}

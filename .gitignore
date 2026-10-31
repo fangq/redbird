@@ -12,6 +12,7 @@ src/
 *.mexmaci64
 *.mexmaca64
 *.mexw64
+*.mex
 
 # scratch outputs from running demos
 example/*.png
